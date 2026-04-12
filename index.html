@@ -382,6 +382,10 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13
   <div class="tb-title" id="tb-title">Dashboard <span>Pernikahan</span></div>
   <div class="tb-right">
     <div class="tb-date" id="tb-date"></div>
+    <div id="sync-status" style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:5px;padding:4px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:20px">
+      <div id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:var(--green)"></div>
+      <span id="sync-txt">Tersimpan</span>
+    </div>
     <button class="tb-btn" onclick="exportXLSX()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Ekspor XLSX
     </button>
@@ -752,6 +756,9 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13
     </div>
     <div style="font-family:var(--serif);font-size:28px;font-weight:600;color:var(--text)">maNTapps <span style="color:var(--blue)">Wedding</span></div>
     <div style="font-size:12px;color:var(--text3);margin-top:5px">Budgeting Pernikahan Modern</div>
+    <div style="font-size:11px;color:var(--blue2);margin-top:8px;background:var(--blueDim);border:1px solid var(--blue4);border-radius:20px;padding:4px 14px;display:inline-block">
+      ☁️ Data tersimpan di cloud — akses dari device manapun
+    </div>
   </div>
   <div id="panel-pilih" class="auth-panel active">
     <div class="auth-card">
@@ -881,13 +888,47 @@ const DEFAULT_DB = {
   counters:{bud:11,dok:11,vnd:6,tamu:6,tl:9}
 };
 
-let db = (()=>{ try{ const r=localStorage.getItem(DB_KEY); return r?JSON.parse(r):JSON.parse(JSON.stringify(DEFAULT_DB)); }catch(e){ return JSON.parse(JSON.stringify(DEFAULT_DB)); } })();
+let db = JSON.parse(JSON.stringify(DEFAULT_DB)); // will be overwritten on login
+
+async function loadDBForUser(email){
+  try{
+    const key = 'db:' + email.toLowerCase().replace(/[^a-z0-9]/g,'_');
+    const result = await window.storage.get(key);
+    if(result && result.value){
+      db = JSON.parse(result.value);
+    } else {
+      db = JSON.parse(JSON.stringify(DEFAULT_DB));
+    }
+  }catch(e){
+    db = JSON.parse(JSON.stringify(DEFAULT_DB));
+  }
+}
 let _editId = {};
 let currentUser = null;
 let _lupaEmail = '';
 
 // ── HELPERS ──
-function saveDB(){ try{ localStorage.setItem(DB_KEY,JSON.stringify(db)); }catch(e){ toast('Storage penuh!','err'); } }
+async function saveDB(){
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-txt');
+  try{
+    if(dot) dot.style.background = '#f59e0b';
+    if(txt) txt.textContent = 'Menyimpan...';
+    if(currentUser){
+      const key = 'db:' + currentUser.email.toLowerCase().replace(/[^a-z0-9]/g,'_');
+      await window.storage.set(key, JSON.stringify(db));
+    } else {
+      localStorage.setItem(DB_KEY, JSON.stringify(db));
+    }
+    if(dot) dot.style.background = 'var(--green)';
+    if(txt) txt.textContent = 'Tersimpan ☁️';
+  }catch(e){
+    if(dot) dot.style.background = 'var(--red)';
+    if(txt) txt.textContent = 'Gagal simpan!';
+    toast('Gagal menyimpan ke cloud!','err');
+    console.error('saveDB error:',e);
+  }
+}
 function nextId(k,p){ return p+String(db.counters[k]++).padStart(3,'0'); }
 function fmt(n){ return 'Rp '+Math.round(n||0).toLocaleString('id-ID'); }
 function fmtS(n){ if(n>=1e9)return'Rp '+(n/1e9).toFixed(1)+'M'; if(n>=1e6)return'Rp '+(n/1e6).toFixed(1)+' jt'; return fmt(n); }
@@ -1518,12 +1559,32 @@ function exportXLSX(){
 // ═══════════════════════════════
 // AUTH SYSTEM
 // ═══════════════════════════════
-function loadAuth(){
-  try{const r=localStorage.getItem(AUTH_KEY);if(r)return JSON.parse(r);}catch(e){}
-  return [{id:'USR001',nama:'Admin',email:'admin@wedding.com',pw:'1234',role:'owner',kode:'WEDDING2024',tgl:nowDate(),lastLogin:null}];
+let authAccounts = [{id:'USR001',nama:'Admin',email:'admin@wedding.com',pw:'1234',role:'owner',kode:'WEDDING2024',tgl:nowDate(),lastLogin:null}];
+
+async function loadAuthAccounts(){
+  try{
+    const result = await window.storage.get('wedding_auth_accounts', true);
+    if(result && result.value){
+      authAccounts = JSON.parse(result.value);
+    }
+  }catch(e){
+    // key doesn't exist yet, use default
+    try{
+      const r = localStorage.getItem(AUTH_KEY);
+      if(r) authAccounts = JSON.parse(r);
+    }catch(e2){}
+  }
 }
-function saveAuth(a){localStorage.setItem(AUTH_KEY,JSON.stringify(a));}
-let authAccounts=loadAuth();
+
+async function saveAuth(a){
+  authAccounts = a;
+  try{
+    await window.storage.set('wedding_auth_accounts', JSON.stringify(a), true);
+  }catch(e){
+    localStorage.setItem(AUTH_KEY, JSON.stringify(a));
+    console.error('saveAuth fallback to localStorage:', e);
+  }
+}
 _lupaEmail=''; // reuse global
 
 function showPanel(id){
@@ -1574,7 +1635,7 @@ function checkStrength(inputId,barId){
 }
 function isValidEmail(e){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);}
 
-function doLogin(){
+async function doLogin(){
   const email=(document.getElementById('login-email').value||'').trim().toLowerCase();
   const pw=document.getElementById('login-pw').value;
   if(!email){showAuthErr('login-err','Email wajib diisi.');return;}
@@ -1582,17 +1643,29 @@ function doLogin(){
   if(!pw){showAuthErr('login-err','Password wajib diisi.');return;}
   const acc=authAccounts.find(a=>a.email.toLowerCase()===email&&a.pw===pw);
   if(!acc){showAuthErr('login-err','Email atau password tidak cocok.');return;}
-  acc.lastLogin=nowStr();saveAuth(authAccounts);
-  currentUser=acc;masukAplikasi();
+  acc.lastLogin=nowStr();await saveAuth(authAccounts);
+  currentUser=acc;await masukAplikasi();
 }
-function masukAplikasi(){
-  sessionStorage.setItem(AUTH_SESSION,JSON.stringify({email:currentUser.email,nama:currentUser.nama,ts:Date.now()}));
+async function masukAplikasi(){
+  // Show loading state
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app-shell').style.display='grid';
+  document.getElementById('app-shell').style.opacity='0.5';
+  document.getElementById('app-shell').style.pointerEvents='none';
+
+  // Load user's cloud data
+  await loadDBForUser(currentUser.email);
+
+  // Restore UI
+  document.getElementById('app-shell').style.opacity='1';
+  document.getElementById('app-shell').style.pointerEvents='auto';
+
+  sessionStorage.setItem(AUTH_SESSION,JSON.stringify({email:currentUser.email,nama:currentUser.nama,ts:Date.now()}));
   updateSidebarUser();
   renderDashboard();
   const lp=sessionStorage.getItem(AUTH_LASTPAGE);
   if(lp&&lp!=='dashboard'){const btn=document.querySelector(`[data-page="${lp}"]`);if(btn)goPage(lp,btn);}
+  toast('Data berhasil dimuat dari cloud ☁️','info');
 }
 function updateSidebarUser(){
   if(!currentUser)return;
@@ -1624,20 +1697,20 @@ function verifikasiPemulihan(){
   document.getElementById('lupa-step1').style.display='none';
   document.getElementById('lupa-step2').style.display='block';
 }
-function resetPassword(){
+async function resetPassword(){
   const nb=document.getElementById('lupa-pw-baru').value;
   const nk=document.getElementById('lupa-pw-konfirm').value;
   if(nb.length<6){showAuthErr('lupa-err','Min. 6 karakter.');return;}
   if(nb!==nk){showAuthErr('lupa-err','Konfirmasi tidak cocok.');return;}
   const idx=authAccounts.findIndex(a=>a.email.toLowerCase()===_lupaEmail);
-  if(idx>=0){authAccounts[idx].pw=nb;saveAuth(authAccounts);}
+  if(idx>=0){authAccounts[idx].pw=nb;await saveAuth(authAccounts);}
   ['lupa-pw-baru','lupa-pw-konfirm'].forEach(x=>document.getElementById(x).value='');
   document.getElementById('lupa-ok').classList.remove('show');
   document.getElementById('lupa-step1').style.display='block';
   document.getElementById('lupa-step2').style.display='none';
   showPanel('panel-login');toast('Password direset!');
 }
-function buatAkun(){
+async function buatAkun(){
   const nama=(document.getElementById('daftar-nama').value||'').trim();
   const email=(document.getElementById('daftar-email').value||'').trim().toLowerCase();
   const role=document.getElementById('daftar-role').value;
@@ -1651,7 +1724,7 @@ function buatAkun(){
   if(!kode||kode.length<6){showAuthErr('daftar-err','Kode pemulihan min. 6 karakter.');return;}
   if(authAccounts.find(a=>a.email.toLowerCase()===email)){showAuthErr('daftar-err','Email sudah terdaftar.');return;}
   const newAcc={id:'USR'+String(authAccounts.length+1).padStart(3,'0'),nama,email,pw,role,kode,tgl:nowDate(),lastLogin:null};
-  authAccounts.push(newAcc);saveAuth(authAccounts);
+  authAccounts.push(newAcc);await saveAuth(authAccounts);
   // Ekspor XLSX users
   try{
     const wb=XLSX.utils.book_new();
@@ -1663,7 +1736,7 @@ function buatAkun(){
   checkStrength('daftar-pw','daftar-str');
   showPanel('panel-pilih');toast(`Akun "${nama}" dibuat!`);
 }
-function gantiPassword(){
+async function gantiPassword(){
   const lama=document.getElementById('gpw-lama').value;
   const baru=document.getElementById('gpw-baru').value;
   const konfirm=document.getElementById('gpw-konfirm').value;
@@ -1673,7 +1746,7 @@ function gantiPassword(){
   if(!acc||acc.pw!==lama){errEl.textContent='Password lama tidak cocok.';errEl.style.display='flex';return;}
   if(baru.length<6){errEl.textContent='Min. 6 karakter.';errEl.style.display='flex';return;}
   if(baru!==konfirm){errEl.textContent='Konfirmasi tidak cocok.';errEl.style.display='flex';return;}
-  acc.pw=baru;saveAuth(authAccounts);
+  acc.pw=baru;await saveAuth(authAccounts);
   closeModal('modal-ganti-pw');['gpw-lama','gpw-baru','gpw-konfirm'].forEach(id=>document.getElementById(id).value='');
   toast('Password berhasil diubah!');
 }
@@ -1684,24 +1757,46 @@ function tickDate(){
   if(el) el.textContent=new Date().toLocaleString('id-ID',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
 }
 
-window.addEventListener('load',()=>{
-  tickDate();setInterval(tickDate,60000);
-  // Session restore
+window.addEventListener('load', async ()=>{
+  tickDate(); setInterval(tickDate,60000);
+
+  // Load shared auth accounts from cloud first
+  await loadAuthAccounts();
+
+  // Setup keyboard handlers
+  const lpw=document.getElementById('login-pw');
+  if(lpw) lpw.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  const le=document.getElementById('login-email');
+  if(le) le.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('login-pw').focus();});
+
+  // Check active session
   const raw=sessionStorage.getItem(AUTH_SESSION);
   if(raw){
     try{
       const sess=JSON.parse(raw);
       if(sess&&sess.email&&(Date.now()-sess.ts)<86400000){
         const acc=authAccounts.find(a=>a.email.toLowerCase()===sess.email.toLowerCase());
-        if(acc){currentUser=acc;document.getElementById('login-screen').style.display='none';document.getElementById('app-shell').style.display='grid';updateSidebarUser();renderDashboard();const lp=sessionStorage.getItem(AUTH_LASTPAGE);if(lp&&lp!=='dashboard'){const btn=document.querySelector(`[data-page="${lp}"]`);if(btn)goPage(lp,btn);}return;}
+        if(acc){
+          currentUser=acc;
+          document.getElementById('login-screen').style.display='none';
+          document.getElementById('app-shell').style.display='grid';
+          document.getElementById('app-shell').style.opacity='0.5';
+          document.getElementById('app-shell').style.pointerEvents='none';
+          await loadDBForUser(acc.email);
+          document.getElementById('app-shell').style.opacity='1';
+          document.getElementById('app-shell').style.pointerEvents='auto';
+          updateSidebarUser();
+          renderDashboard();
+          const lp=sessionStorage.getItem(AUTH_LASTPAGE);
+          if(lp&&lp!=='dashboard'){const btn=document.querySelector(`[data-page="${lp}"]`);if(btn)goPage(lp,btn);}
+          return;
+        }
       }
     }catch(e){sessionStorage.removeItem(AUTH_SESSION);}
   }
+
+  // Show login
   renderAuthList();
-  const lpw=document.getElementById('login-pw');
-  if(lpw)lpw.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
-  const le=document.getElementById('login-email');
-  if(le)le.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('login-pw').focus();});
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open'));});
 </script>
