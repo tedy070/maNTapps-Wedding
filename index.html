@@ -21,15 +21,16 @@ import { getFirestore, doc, getDoc, setDoc, deleteDoc,
                                              from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 // ── GANTI BAGIAN INI dengan config Firebase Anda ──
-const FIREBASE_CONFIG = {
-  apiKey:            "GANTI_API_KEY",
-  authDomain:        "GANTI_PROJECT_ID.firebaseapp.com",
-  projectId:         "GANTI_PROJECT_ID",
-  storageBucket:     "GANTI_PROJECT_ID.appspot.com",
-  messagingSenderId: "GANTI_MESSAGING_SENDER_ID",
-  appId:             "GANTI_APP_ID"
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCJayt0NVECghIAJJKEG3HKbESpSU0Qd-M",
+  authDomain: "mantapps-wedding.firebaseapp.com",
+  projectId: "mantapps-wedding",
+  storageBucket: "mantapps-wedding.firebasestorage.app",
+  messagingSenderId: "456526363504",
+  appId: "1:456526363504:web:0c6e2b6c5ed41837e36db5",
+  measurementId: "G-QZR7W42BG3"
 };
-
 const _app  = initializeApp(FIREBASE_CONFIG);
 const _auth = getAuth(_app);
 const _fsdb = getFirestore(_app);
@@ -618,71 +619,13 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13
     </div>
     <div>
       <div class="card" style="margin-bottom:16px">
-        <div class="card-hdr"><span class="card-title">☁️ Cloud Database (Google Sheets)</span></div>
-        <div id="cloud-status-card" style="margin-bottom:12px"></div>
-        <div class="form-group">
-          <label>Google Apps Script URL</label>
-          <input type="url" id="set-script-url" placeholder="https://script.google.com/macros/s/..." style="font-size:11px">
-          <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.6">
-            Ikuti panduan setup di bawah untuk mendapatkan URL ini. Data akan tersinkron otomatis ke Google Sheets Anda.
-          </div>
-        </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn-blue" style="flex:1;height:38px;font-size:13px" onclick="simpanCloudUrl()">Simpan & Hubungkan</button>
-          <button class="tb-btn" style="height:38px;padding:0 14px" onclick="simpanCloudUrl()">Test</button>
-        </div>
-        <div style="margin-top:12px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);font-size:11.5px;color:var(--text2);line-height:1.7">
-          <strong style="color:var(--blue)">Cara Setup (5 menit):</strong><br>
-          1. Buka <a href="https://script.google.com" target="_blank" style="color:var(--blue)">script.google.com</a> → Proyek Baru<br>
-          2. Hapus kode lama, tempel kode Apps Script (lihat tombol di bawah)<br>
-          3. Klik <strong>Deploy → Deployment Baru → Web App</strong><br>
-          4. Akses: <em>Semua Orang</em> → Deploy → Salin URL<br>
-          5. Tempel URL di kolom di atas → Simpan & Hubungkan
-        </div>
-        <button class="tb-btn" style="width:100%;height:36px;margin-top:10px;font-size:12px;color:var(--blue)" onclick="openModalSync();switchSyncTab('cloud')">
-          📋 Tampilkan Kode Apps Script untuk Disalin
-        </button>
-      </div>
-      <div class="card" style="margin-bottom:16px">
         <div class="card-hdr"><span class="card-title">Info Sistem</span></div>
         <div id="set-sysinfo"></div>
-      </div>
-      <div class="card" style="margin-bottom:16px;border-color:var(--blue4);background:linear-gradient(135deg,#fff 0%,var(--blueDim) 100%)">
-        <div class="card-hdr">
-          <span class="card-title">☁️ Koneksi Google Sheets</span>
-          <div id="cloud-setup-status" style="font-size:11px"></div>
-        </div>
-        <div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6">
-          Hubungkan ke Google Sheets agar data tersimpan di cloud dan bisa diakses dari <strong>device manapun</strong> secara otomatis.
-        </div>
-        <div class="form-group" style="margin-bottom:8px">
-          <label>URL Google Apps Script</label>
-          <div id="cloud-conn-status" style="font-size:12px;margin-bottom:6px;min-height:18px"></div>
-          <input type="url" id="cloud-url-input" placeholder="https://script.google.com/macros/s/…/exec" style="font-size:11px;font-family:monospace">
-        </div>
-        <div style="display:flex;gap:8px;margin-bottom:10px">
-          <button class="btn-blue" style="flex:1;height:36px;font-size:12px" onclick="simpanScriptUrl()">Hubungkan & Test</button>
-          <button class="tb-btn" style="height:36px;padding:0 12px;font-size:12px;color:var(--red)" onclick="hapusCloudUrl()">Hapus</button>
-        </div>
-        <div style="background:var(--bg2);border-radius:var(--r);padding:10px 12px;font-size:11.5px;color:var(--text2);line-height:1.7">
-          <strong>Cara setup (5 menit):</strong><br>
-          1. Klik tombol <strong>"Lihat Panduan Setup"</strong> di bawah<br>
-          2. Salin kode Apps Script → paste ke Google Apps Script<br>
-          3. Deploy sebagai Web App → salin URL → paste di atas<br>
-          4. Klik <strong>"Hubungkan & Test"</strong>
-        </div>
-        <button class="tb-btn" style="width:100%;height:36px;margin-top:10px;font-size:12px;color:var(--blue);border-color:var(--blue4)" onclick="openModal('modal-panduan-cloud')">
-          📖 Lihat Panduan Setup Google Sheets
-        </button>
       </div>
       <div class="card">
         <div class="card-hdr"><span class="card-title">Manajemen Data</span></div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <button class="btn-blue" style="width:100%;height:38px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:7px" onclick="openModal('modal-sinkron');switchSyncTab('export')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            Sinkronisasi Antar Device
-          </button>
-          <button class="tb-btn" style="height:38px;justify-content:center;display:flex;align-items:center;gap:7px;color:var(--blue);border-color:var(--blueDim)" onclick="openModalSync()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             Sinkronisasi Antar Device
           </button>
