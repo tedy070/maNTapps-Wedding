@@ -323,67 +323,90 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13
 .badge-admin{background:var(--greenDim);color:var(--green);}
 .badge-user{background:var(--bg3);color:var(--text3);}
 
- /* ── PENYESUAIAN MOBILE & RESPONSIF (FIX SCROLL & CLIPPING) ── */
+  /* ── PENYESUAIAN MOBILE & RESPONSIF (maNTapps Wedding) ── */
 @media (max-width: 900px) {
-  /* 1. Izinkan Body dan Shell untuk scroll secara alami */
-  html, body {
-    height: auto; /* Mengubah dari 100% ke auto agar bisa memanjang */
-    overflow-y: auto; /* Mengaktifkan scroll pada level browser */
-  }
-
+  /* Sembunyikan sidebar asli, ganti layout ke satu kolom */
   .shell {
     grid-template-columns: 1fr;
-    height: auto; /* Izinkan container mengikuti panjang konten */
-    display: block; /* Mengubah grid menjadi block agar alirannya natural */
   }
 
-  /* 2. Sembunyikan Sidebar di mobile untuk hemat ruang */
   .sidebar {
-    display: none; 
+    display: none; /* Idealnya buatkan menu hamburger nantinya */
   }
 
-  /* 3. Perbaiki Main Area agar tidak terkunci tingginya */
   .main-area {
-    display: block; /* Menghapus grid-template-rows 60px 1fr */
-    height: auto;
-    overflow: visible;
+    grid-template-rows: auto 1fr;
   }
 
-  /* 4. Pastikan Content bisa di-scroll dan tidak terpotong */
+  .topbar {
+    padding: 0 16px;
+    height: 56px;
+  }
+
+  .tb-title {
+    font-size: 18px;
+  }
+
   .content {
     padding: 16px;
-    height: auto;
-    overflow: visible; /* Melepaskan kunci scroll internal */
   }
 
-  /* 5. Optimasi elemen grid agar tidak melebar keluar layar */
-  .stats-grid, .stats-grid.g3, .stats-grid.g5, 
+  /* Statistik menjadi 2 kolom agar tidak berdesakan */
+  .stats-grid, .stats-grid.g3, .stats-grid.g5 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  /* Grid layout (g2, g3c, g65) dipaksa menjadi satu kolom */
   .g2, .g3c, .g65, .g56, .form-row, .form-row3 {
-    grid-template-columns: 1fr; /* Paksa jadi 1 kolom semua */
+    grid-template-columns: 1fr;
     gap: 12px;
   }
 
-  /* 6. Pastikan Topbar tetap di atas (Sticky) jika diinginkan */
-  .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    width: 100%;
-    height: 60px;
-    padding: 0 16px;
+  /* Penyesuaian ukuran teks untuk mobile */
+  .stat-val {
+    font-size: 20px;
+  }
+
+  .card {
+    padding: 16px;
   }
 }
 
-/* KHUSUS MODE LANDSCAPE (HP MIRING) */
+/* KHUSUS MODE LANDSCAPE PADA HP (Layar Pendek) */
 @media (max-height: 500px) and (orientation: landscape) {
   .topbar {
-    height: 50px;
+    height: 48px;
   }
-  
-  /* Di landscape miring, statistik boleh 2 kolom agar tidak terlalu panjang */
+
+  .content {
+    padding: 12px;
+  }
+
+  /* Statistik kembali ke 3 atau 4 kolom agar tidak terlalu memanjang ke bawah */
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
+
+  .modal-box {
+    padding: 20px;
+    max-height: 92vh;
+  }
+
+  /* Sembunyikan sub-title di topbar agar hemat ruang */
+  .tb-date {
+    display: none;
+  }
+}
+
+/* Memperbaiki tinggi body di mobile agar tidak terpotong notch/address bar */
+html, body {
+  height: 100dvh;
+}
+
+.w-full {
+  width: 100% !important;
+  box-sizing: border-box;
 }
 </style>
 </head>
