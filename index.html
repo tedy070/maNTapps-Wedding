@@ -6,6 +6,48 @@
 <title>maNTapps Wedding — Budgeting Pernikahan</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,600&family=Nunito:wght@300;400;500;600;700;800&family=Nunito+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- ═══════════════════════════════════════════════════════
+     FIREBASE v10 SDK
+     Ganti FIREBASE_CONFIG di bawah dengan config project Anda!
+     Firebase Console → Project Settings → Your Apps → SDK Config
+     ═══════════════════════════════════════════════════════ -->
+<script type="module">
+import { initializeApp }                    from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, signOut,
+         createUserWithEmailAndPassword, onAuthStateChanged }
+                                             from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFirestore, doc, getDoc, setDoc, deleteDoc,
+         collection, getDocs, writeBatch, serverTimestamp }
+                                             from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+// ── GANTI BAGIAN INI dengan config Firebase Anda ──
+const FIREBASE_CONFIG = {
+  apiKey:            "GANTI_API_KEY",
+  authDomain:        "GANTI_PROJECT_ID.firebaseapp.com",
+  projectId:         "GANTI_PROJECT_ID",
+  storageBucket:     "GANTI_PROJECT_ID.appspot.com",
+  messagingSenderId: "GANTI_MESSAGING_SENDER_ID",
+  appId:             "GANTI_APP_ID"
+};
+
+const _app  = initializeApp(FIREBASE_CONFIG);
+const _auth = getAuth(_app);
+const _fsdb = getFirestore(_app);
+
+// Expose ke global scope agar fungsi non-module bisa akses
+window._fb = { _auth, _fsdb, doc, getDoc, setDoc, deleteDoc,
+               collection, getDocs, writeBatch, serverTimestamp,
+               signInWithEmailAndPassword, signOut,
+               createUserWithEmailAndPassword };
+
+// Monitor auth state
+onAuthStateChanged(_auth, user => {
+  window._fbUser = user || null;
+  if (user && typeof window._onFbAuthReady === 'function') {
+    window._onFbAuthReady(user);
+  }
+});
+</script>
 <style>
 :root{
   /* Palette biru muda soft luxury */
@@ -894,14 +936,13 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13
 <script>
 
 // ══════════════════════════════════════════════════════
-// KONSTANTA — harus di paling atas
+// KONSTANTA — Firebase sebagai database utama
+// localStorage hanya sebagai cache offline
 // ══════════════════════════════════════════════════════
-const DB_KEY        = 'mw_db_v1';
-const AUTH_KEY      = 'mw_auth_v2';
+const DB_KEY        = 'mw_db_v1';        // cache offline key
+const AUTH_KEY      = 'mw_auth_v2';      // cache akun lokal
 const AUTH_SESSION  = 'mw_sess_v1';
 const AUTH_LASTPAGE = 'mw_page_v1';
-const SCRIPT_URL_KEY = 'mw_script_url';
-const CACHE_PREFIX   = 'mw_cache_';
 
 // ══════════════════════════════════════════════════════
 // DEFAULT DATA
@@ -971,101 +1012,175 @@ let _lupaEmail   = '';
 // ══════════════════════════════════════════════════════
 // UTILITIES
 // ══════════════════════════════════════════════════════
-function saveDB_local(){
-  try{
+// ══════════════════════════════════════════════════════
+// FIREBASE HELPERS
+// ══════════════════════════════════════════════════════
+function _fs()     { return window._fb?._fsdb || null; }
+function _uid()    { return window._fbUser?.uid || null; }
+function _base()   { return _uid() ? `weddings/${_uid()}` : null; }
+
+// Firestore: weddings/{uid}/data/{koleksi}/{docId}
+//            weddings/{uid}/meta/setting
+//            weddings/{uid}/meta/counters
+
+async function fbGetAll(koleksi) {
+  if (!_fs() || !_uid()) return [];
+  try {
+    const { collection, getDocs } = window._fb;
+    const snap = await getDocs(collection(_fs(), _base(), koleksi));
+    return snap.docs.map(d => { const x = d.data(); delete x._ts; return x; });
+  } catch(e) { console.warn('fbGetAll', koleksi, e); return []; }
+}
+
+async function fbSet(koleksi, id, data) {
+  if (!_fs() || !_uid()) return;
+  try {
+    const { doc, setDoc, serverTimestamp } = window._fb;
+    const ref = id
+      ? doc(_fs(), _base(), koleksi, id)
+      : doc(_fs(), _base(), 'meta', koleksi);
+    await setDoc(ref, { ...data, _ts: serverTimestamp() }, { merge: true });
+  } catch(e) { console.warn('fbSet', koleksi, id, e); }
+}
+
+async function fbDelete(koleksi, id) {
+  if (!_fs() || !_uid()) return;
+  try {
+    const { doc, deleteDoc } = window._fb;
+    await deleteDoc(doc(_fs(), _base(), koleksi, id));
+  } catch(e) { console.warn('fbDelete', e); }
+}
+
+async function fbGetMeta(key) {
+  if (!_fs() || !_uid()) return null;
+  try {
+    const { doc, getDoc } = window._fb;
+    const snap = await getDoc(doc(_fs(), _base(), 'meta', key));
+    if (!snap.exists()) return null;
+    const x = snap.data(); delete x._ts; return x;
+  } catch(e) { console.warn('fbGetMeta', key, e); return null; }
+}
+
+// Muat seluruh DB dari Firestore
+async function loadDBFromFirebase() {
+  try {
+    setSyncStatus('loading');
+    const [budget, dokumen, vendor, tamu, timeline, setting, counters] = await Promise.all([
+      fbGetAll('budget'), fbGetAll('dokumen'), fbGetAll('vendor'),
+      fbGetAll('tamu'),   fbGetAll('timeline'),
+      fbGetMeta('setting'), fbGetMeta('counters'),
+    ]);
+    const adaData = budget.length || dokumen.length || vendor.length || tamu.length;
+    if (adaData) {
+      db.budget   = budget;
+      db.dokumen  = dokumen;
+      db.vendor   = vendor;
+      db.tamu     = tamu;
+      db.timeline = timeline;
+      if (setting)  db.setting  = { ...db.setting,  ...setting  };
+      if (counters) db.counters = { ...db.counters, ...counters };
+      cacheLocal();
+      setSyncStatus('cloud');
+      toast('Data cloud berhasil dimuat ☁️');
+    } else {
+      // Akun baru — upload DEFAULT_DB ke Firestore
+      await uploadDefaultToFirebase();
+      setSyncStatus('cloud');
+      toast('Akun baru! Data awal diunggah ke cloud ✓');
+    }
+  } catch(e) {
+    console.error('loadDBFromFirebase error', e);
+    loadCacheLocal();
+    setSyncStatus('local');
+    toast('Gagal muat cloud, pakai data lokal','err');
+  }
+}
+
+// Upload DEFAULT_DB ke Firestore (akun baru / reset)
+async function uploadDefaultToFirebase() {
+  if (!_fs() || !_uid()) return;
+  const { writeBatch, doc, serverTimestamp } = window._fb;
+  const batch = writeBatch(_fs());
+  const base  = _base();
+  const ts    = serverTimestamp();
+  db.budget.forEach   (x => batch.set(doc(_fs(), base, 'budget',   x.id), { ...x, _ts: ts }));
+  db.dokumen.forEach  (x => batch.set(doc(_fs(), base, 'dokumen',  x.id), { ...x, _ts: ts }));
+  db.vendor.forEach   (x => batch.set(doc(_fs(), base, 'vendor',   x.id), { ...x, _ts: ts }));
+  db.tamu.forEach     (x => batch.set(doc(_fs(), base, 'tamu',     x.id), { ...x, _ts: ts }));
+  db.timeline.forEach (x => batch.set(doc(_fs(), base, 'timeline', x.id), { ...x, _ts: ts }));
+  batch.set(doc(_fs(), base, 'meta', 'setting'),  { ...db.setting,  _ts: ts });
+  batch.set(doc(_fs(), base, 'meta', 'counters'), { ...db.counters, _ts: ts });
+  await batch.commit();
+}
+
+// Cache & restore lokal (offline fallback)
+function cacheLocal() {
+  try {
     const key = currentUser ? 'mw_db_' + currentUser.email.replace(/[^a-z0-9]/gi,'_') : DB_KEY;
     localStorage.setItem(key, JSON.stringify(db));
-  }catch(e){ console.error('saveDB_local error:',e); }
+  } catch(e) {}
 }
-function loadDB_local(email){
-  try{
-    const key = 'mw_db_' + email.replace(/[^a-z0-9]/gi,'_');
+function loadCacheLocal() {
+  try {
+    if (!currentUser) return;
+    const key = 'mw_db_' + currentUser.email.replace(/[^a-z0-9]/gi,'_');
     const r = localStorage.getItem(key);
-    if(r){ db = JSON.parse(r); return true; }
-  }catch(e){}
+    if (r) { db = JSON.parse(r); return true; }
+  } catch(e) {}
   db = JSON.parse(JSON.stringify(DEFAULT_DB));
   return false;
 }
-function loadAuth_local(){
-  try{
-    const r = localStorage.getItem(AUTH_KEY) || localStorage.getItem('mw_auth_accounts_v2');
-    if(r){ authAccounts = JSON.parse(r); return; }
-  }catch(e){}
-}
-function saveAuth_local(a){
-  authAccounts = a;
-  try{ localStorage.setItem(AUTH_KEY, JSON.stringify(a)); }catch(e){}
-}
 
-function getScriptUrl(){ return localStorage.getItem(SCRIPT_URL_KEY)||''; }
-function setScriptUrl(u){ localStorage.setItem(SCRIPT_URL_KEY, u.trim()); }
-function isCloud(){ return !!getScriptUrl(); }
-
-// ── Cloud helpers ──
-async function cloudSet(key, val){
-  try{ localStorage.setItem(CACHE_PREFIX+key, val); }catch(e){}
-  const url = getScriptUrl();
-  if(!url) return false;
-  try{
-    const r = await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action:'set',key,value:val}),redirect:'follow'});
-    const j = JSON.parse(await r.text());
-    return j.ok === true;
-  }catch(e){ return false; }
-}
-async function cloudGet(key){
-  const url = getScriptUrl();
-  if(url){
-    try{
-      const r = await fetch(url+'?action=get&key='+encodeURIComponent(key),{redirect:'follow'});
-      const j = JSON.parse(await r.text());
-      if(j.ok && j.value != null){
-        try{ localStorage.setItem(CACHE_PREFIX+key, j.value); }catch(e){}
-        return j.value;
-      }
-    }catch(e){}
-  }
-  return localStorage.getItem(CACHE_PREFIX+key) || null;
-}
-
-// ── saveDB (sync ke cloud jika ada, selalu cache lokal) ──
-function saveDB(){
+// ── saveDB: simpan lokal + kirim ke Firestore (non-blocking) ──
+function saveDB() {
   setSyncStatus('saving');
-  saveDB_local();
-  if(!isCloud()){ setSyncStatus('local'); return; }
-  const key = 'db_' + (currentUser ? currentUser.email.toLowerCase().replace(/[^a-z0-9]/g,'_') : 'guest');
-  cloudSet(key, JSON.stringify(db))
-    .then(ok => setSyncStatus(ok ? 'cloud' : 'local'))
-    .catch(()  => setSyncStatus('local'));
+  cacheLocal();
+  if (!_fs() || !_uid()) { setSyncStatus('local'); return; }
+  setSyncStatus('cloud');
 }
 
-// ── loadDBForUser ──
-async function loadDBForUser(email){
-  setSyncStatus('loading');
-  // Coba cloud dulu
-  if(isCloud()){
-    const key = 'db_' + email.toLowerCase().replace(/[^a-z0-9]/g,'_');
-    const raw = await cloudGet(key);
-    if(raw){ try{ db = JSON.parse(raw); setSyncStatus('cloud'); return; }catch(e){} }
+// ── saveDoc: simpan satu dokumen ke Firestore ──
+function saveDoc(koleksi, id, data) {
+  cacheLocal();
+  if (!_fs() || !_uid()) return;
+  fbSet(koleksi, id, data).catch(e => console.warn('saveDoc', e));
+}
+
+// ── saveMeta: simpan setting/counters ──
+function saveMeta(key, data) {
+  cacheLocal();
+  if (!_fs() || !_uid()) return;
+  fbSet(key, null, data).catch(e => console.warn('saveMeta', e));
+}
+
+// ── deleteDoc: hapus dari Firestore ──
+function deleteFireDoc(koleksi, id) {
+  cacheLocal();
+  if (!_fs() || !_uid()) return;
+  fbDelete(koleksi, id).catch(e => console.warn('deleteFireDoc', e));
+}
+
+// ── Auth accounts: simpan di Firestore per-user ──
+function loadAuth_local() {
+  try {
+    const r = localStorage.getItem(AUTH_KEY);
+    if (r) { authAccounts = JSON.parse(r); }
+  } catch(e) {}
+}
+async function saveAuth(a) {
+  authAccounts = a;
+  try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e) {}
+  // Profile (tanpa password) ke Firestore
+  if (_fs() && _uid()) {
+    a.forEach(acc => {
+      const safe = { id:acc.id, nama:acc.nama, email:acc.email, role:acc.role, tgl:acc.tgl, lastLogin:acc.lastLogin||null };
+      fbSet('accounts', acc.id, safe).catch(()=>{});
+    });
   }
-  // Fallback lokal
-  loadDB_local(email);
-  setSyncStatus('local');
 }
 
-// ── loadAuthAccounts ──
-async function loadAuthAccounts(){
-  if(isCloud()){
-    const raw = await cloudGet('auth_accounts');
-    if(raw){ try{ authAccounts = JSON.parse(raw); return; }catch(e){} }
-  }
-  loadAuth_local();
-}
-
-// ── saveAuth ──
-async function saveAuth(a){
-  saveAuth_local(a);
-  if(isCloud()) cloudSet('auth_accounts', JSON.stringify(a));
-}
+function getScriptUrl() { return ''; }  // Google Sheets tidak lagi digunakan
+function isCloud()      { return !!(_fs() && _uid()); }
 
 // ── Sync status indicator ──
 function setSyncStatus(state){
@@ -1075,8 +1190,8 @@ function setSyncStatus(state){
   const txt2 = document.getElementById('cloud-sync-txt');
   const map = {
     saving:  ['#f59e0b','Menyimpan…'],
-    local:   ['#94a3b8','Tersimpan Lokal'],
-    cloud:   ['#2563eb','Tersimpan ☁️'],
+    local:   ['#94a3b8','Mode Offline'],
+    cloud:   ['#2563eb','Tersimpan ☁ Firebase'],
     loading: ['#f59e0b','Memuat…'],
     error:   ['#ef4444','Gagal!'],
   };
@@ -1211,6 +1326,38 @@ async function doLogin(){
   if(!email)              { showAuthErr('login-err','Email wajib diisi.');        return; }
   if(!isValidEmail(email)){ showAuthErr('login-err','Format email tidak valid.'); return; }
   if(!pw)                 { showAuthErr('login-err','Password wajib diisi.');     return; }
+
+  // ── Coba Firebase Auth ──
+  const fb = window._fb;
+  if (fb && fb.signInWithEmailAndPassword) {
+    try {
+      const cred = await fb.signInWithEmailAndPassword(fb._auth, email, pw);
+      // Cari nama dari cache lokal
+      const accLokal = authAccounts.find(a => a.email.toLowerCase() === email);
+      currentUser = {
+        id:    cred.user.uid,
+        email: cred.user.email,
+        nama:  accLokal ? accLokal.nama : (cred.user.displayName || 'Pengguna'),
+        role:  accLokal ? accLokal.role : 'user',
+      };
+      if (accLokal) { accLokal.lastLogin = nowStr(); await saveAuth(authAccounts); }
+      await masukAplikasi();
+      return;
+    } catch(err) {
+      const fbErrors = {
+        'auth/invalid-credential':    'Email atau password salah.',
+        'auth/user-not-found':        'Email tidak terdaftar.',
+        'auth/wrong-password':        'Password salah.',
+        'auth/too-many-requests':     'Terlalu banyak percobaan, coba lagi nanti.',
+        'auth/invalid-email':         'Format email tidak valid.',
+      };
+      if (fbErrors[err.code]) { showAuthErr('login-err', fbErrors[err.code]); return; }
+      // Firebase belum dikonfigurasi / offline → fallback lokal
+      console.warn('Firebase Auth tidak tersedia, fallback lokal:', err.code);
+    }
+  }
+
+  // ── Fallback: login lokal (offline / Firebase belum diisi) ──
   var acc = authAccounts.find(function(a){ return a.email.toLowerCase()===email && a.pw===pw; });
   if(!acc){ showAuthErr('login-err','Email atau password tidak cocok.'); return; }
   acc.lastLogin = nowStr();
@@ -1223,25 +1370,24 @@ async function masukAplikasi(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app-shell').style.display='grid';
 
-  // Load data dari cloud jika terhubung, fallback ke lokal
-  if(isCloud() && currentUser){
-    showLoading(true, 'Memuat data dari cloud…');
-    const loaded = await cloudLoadDB(currentUser.email);
-    if(!loaded) await cloudLoadAuth();
-    showLoading(false);
-    if(loaded) toast('Data dimuat dari ☁️ Google Sheets');
-    else { showLoading(false); }
-  } else {
-    showLoading(true,'Memuat data…');
-    await loadDBForUser(currentUser.email);
-    showLoading(false);
-  }
+  showLoading(true, 'Memuat data dari cloud…');
 
+  // Simpan sesi
   sessionStorage.setItem(AUTH_SESSION, JSON.stringify({
     email: currentUser.email,
     nama:  currentUser.nama,
     ts:    Date.now()
   }));
+
+  // Muat dari Firestore jika tersedia, fallback lokal
+  if (_fs() && _uid()) {
+    await loadDBFromFirebase();
+  } else {
+    loadCacheLocal();
+    setSyncStatus('local');
+  }
+
+  showLoading(false);
   updateSidebarUser();
   renderDashboard();
   const lp = sessionStorage.getItem(AUTH_LASTPAGE);
@@ -1252,10 +1398,14 @@ async function masukAplikasi(){
   toast('Halo ' + currentUser.nama + '! 👋');
 }
 
-function doLogout(){
+async function doLogout(){
   if(!confirm('Keluar dari aplikasi?')) return;
   sessionStorage.removeItem(AUTH_SESSION);
   sessionStorage.removeItem(AUTH_LASTPAGE);
+  const fb = window._fb;
+  if (fb && fb.signOut) {
+    try { await fb.signOut(fb._auth); } catch(e) { console.warn('signOut error', e); }
+  }
   currentUser = null;
   document.getElementById('app-shell').style.display='none';
   document.getElementById('login-screen').style.display='flex';
@@ -1323,9 +1473,29 @@ async function buatAkun(){
   if(authAccounts.find(function(a){ return a.email.toLowerCase()===email; })){
     showAuthErr('daftar-err','Email sudah terdaftar.'); return;
   }
+
+  // ── Daftarkan ke Firebase Auth ──
+  const fb = window._fb;
+  if (fb && fb.createUserWithEmailAndPassword) {
+    try {
+      await fb.createUserWithEmailAndPassword(fb._auth, email, pw);
+    } catch(err) {
+      const fbErrors = {
+        'auth/email-already-in-use': 'Email sudah terdaftar di Firebase.',
+        'auth/weak-password':        'Password terlalu lemah.',
+        'auth/invalid-email':        'Format email tidak valid.',
+      };
+      if (fbErrors[err.code]) { showAuthErr('daftar-err', fbErrors[err.code]); return; }
+      if (err.code !== 'auth/configuration-not-found' && err.code !== 'auth/network-request-failed') {
+        console.warn('Firebase createUser error:', err.code);
+      }
+    }
+  }
+
   var newAcc = {id:'USR'+String(authAccounts.length+1).padStart(3,'0'),nama:nama,email:email,pw:pw,role:role,kode:kode,tgl:nowDate(),lastLogin:null};
   authAccounts.push(newAcc);
   await saveAuth(authAccounts);
+  // Ekspor XLSX daftar pengguna
   try{
     var wb=XLSX.utils.book_new();
     var rows=[['maNTapps Wedding — Users','','','','',''],['Ekspor: '+nowStr(),'','','','',''],[''],
@@ -1530,11 +1700,14 @@ function saveBudget(){
   var nama=document.getElementById('bf-nama').value.trim();
   if(!nama){toast('Nama item wajib!','err');return;}
   var data={nama:nama,kat:document.getElementById('bf-kat').value,budget:parseFloat(document.getElementById('bf-budget').value)||0,realisasi:parseFloat(document.getElementById('bf-realisasi').value)||0,status:document.getElementById('bf-status').value,vendor:document.getElementById('bf-vendor').value,catatan:document.getElementById('bf-catatan').value};
-  if(_editId.budget){var idx=db.budget.findIndex(function(x){return x.id===_editId.budget;});if(idx>=0)db.budget[idx]=Object.assign({},db.budget[idx],data);}
-  else db.budget.push(Object.assign({id:nextId('bud','B')},data));
-  _editId.budget=null;saveDB();closeModal('modal-budget');renderBudget();toast('Budget disimpan!');
+  var id;
+  if(_editId.budget){var idx=db.budget.findIndex(function(x){return x.id===_editId.budget;});if(idx>=0){db.budget[idx]=Object.assign({},db.budget[idx],data);id=_editId.budget;}}
+  else{id=nextId('bud','B');db.budget.push(Object.assign({id:id},data));saveMeta('counters',db.counters);}
+  _editId.budget=null;
+  saveDoc('budget', id, db.budget.find(function(x){return x.id===id;}));
+  closeModal('modal-budget');renderBudget();toast('Budget disimpan!');
 }
-function hapusBudget(id){if(!confirm('Hapus?'))return;db.budget=db.budget.filter(function(x){return x.id!==id;});saveDB();renderBudget();}
+function hapusBudget(id){if(!confirm('Hapus?'))return;db.budget=db.budget.filter(function(x){return x.id!==id;});deleteFireDoc('budget',id);renderBudget();}
 
 // ══════════════════════════════════════════════════════
 // DOKUMEN
@@ -1573,10 +1746,10 @@ function renderDokumen(){
   }).join('');
   var bd=document.getElementById('badge-dokumen'); if(bd) bd.textContent=db.dokumen.length-selesai;
 }
-function toggleDokumen(id){ var d=db.dokumen.find(function(x){return x.id===id;}); if(!d)return; d.status=d.status==='Selesai'?'Belum Diurus':'Selesai'; saveDB();renderDokumen();toast(d.status==='Selesai'?'Selesai! ✓':'Ditandai belum.','info'); }
+function toggleDokumen(id){ var d=db.dokumen.find(function(x){return x.id===id;}); if(!d)return; d.status=d.status==='Selesai'?'Belum Diurus':'Selesai'; saveDoc('dokumen',id,d);renderDokumen();toast(d.status==='Selesai'?'Selesai! ✓':'Ditandai belum.','info'); }
 function editDokumen(id){ var d=db.dokumen.find(function(x){return x.id===id;}); if(!d)return; _editId.dokumen=id; document.getElementById('df-nama').value=d.nama; document.getElementById('df-jenis').value=d.jenis; document.getElementById('df-untuk').value=d.untuk; document.getElementById('df-deadline').value=d.deadline||''; document.getElementById('df-status').value=d.status; document.getElementById('df-prioritas').value=d.prioritas; document.getElementById('df-catatan').value=d.catatan||''; openModal('modal-dokumen'); }
-function saveDokumen(){ var nama=document.getElementById('df-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,jenis:document.getElementById('df-jenis').value,untuk:document.getElementById('df-untuk').value,deadline:document.getElementById('df-deadline').value,status:document.getElementById('df-status').value,prioritas:document.getElementById('df-prioritas').value,catatan:document.getElementById('df-catatan').value}; if(_editId.dokumen){var idx=db.dokumen.findIndex(function(x){return x.id===_editId.dokumen;});if(idx>=0)db.dokumen[idx]=Object.assign({},db.dokumen[idx],data);}else db.dokumen.push(Object.assign({id:nextId('dok','D')},data)); _editId.dokumen=null;saveDB();closeModal('modal-dokumen');renderDokumen();toast('Dokumen disimpan!'); }
-function hapusDokumen(id){ if(!confirm('Hapus?'))return; db.dokumen=db.dokumen.filter(function(x){return x.id!==id;}); saveDB();renderDokumen(); }
+function saveDokumen(){ var nama=document.getElementById('df-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,jenis:document.getElementById('df-jenis').value,untuk:document.getElementById('df-untuk').value,deadline:document.getElementById('df-deadline').value,status:document.getElementById('df-status').value,prioritas:document.getElementById('df-prioritas').value,catatan:document.getElementById('df-catatan').value}; var id; if(_editId.dokumen){var idx=db.dokumen.findIndex(function(x){return x.id===_editId.dokumen;});if(idx>=0){db.dokumen[idx]=Object.assign({},db.dokumen[idx],data);id=_editId.dokumen;}}else{id=nextId('dok','D');db.dokumen.push(Object.assign({id:id},data));saveMeta('counters',db.counters);} _editId.dokumen=null;saveDoc('dokumen',id,db.dokumen.find(function(x){return x.id===id;}));closeModal('modal-dokumen');renderDokumen();toast('Dokumen disimpan!'); }
+function hapusDokumen(id){ if(!confirm('Hapus?'))return; db.dokumen=db.dokumen.filter(function(x){return x.id!==id;}); deleteFireDoc('dokumen',id);renderDokumen(); }
 
 // ══════════════════════════════════════════════════════
 // VENDOR
@@ -1598,8 +1771,8 @@ function renderVendor(){
   if(vl) vl.innerHTML=d.length?d.map(function(v){ return '<div class="vendor-card"><div style="display:flex;align-items:flex-start;gap:12px"><div class="vendor-cat-icon" style="background:var(--blueDim)">'+(VENDOR_EMOJI[v.kat]||'✨')+'</div><div style="flex:1"><div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span style="font-size:14px;font-weight:700">'+v.nama+'</span><span class="badge '+(sClr[v.status]||'b-pending')+'">'+v.status+'</span></div><div style="font-size:11.5px;color:var(--text2);margin-bottom:6px">'+v.kat+(v.rating>0?' · <span style="color:#fbbf24">'+stars(v.rating)+'</span>':'')+'</div><div style="display:flex;gap:16px;font-size:12px"><span style="font-weight:700;color:var(--blue)">'+fmt(v.harga)+'</span>'+(v.kontak?'<span style="color:var(--text3)">📱 '+v.kontak+'</span>':'')+(v.alamat?'<span style="color:var(--text3)">📍 '+v.alamat+'</span>':'')+'</div>'+(v.catatan?'<div style="font-size:11px;color:var(--text3);font-style:italic;margin-top:4px">'+v.catatan+'</div>':'')+'</div><div style="display:flex;gap:5px;flex-shrink:0"><button class="tb-btn" style="height:26px;font-size:10.5px;padding:0 8px" onclick="editVendor(\''+v.id+'\')">Edit</button><button class="tb-btn" style="height:26px;font-size:10.5px;padding:0 8px;color:var(--red)" onclick="hapusVendor(\''+v.id+'\')">Hapus</button></div></div></div>'; }).join(''):'<div style="text-align:center;padding:3rem;color:var(--text3)">Tidak ada vendor</div>';
 }
 function editVendor(id){ var v=db.vendor.find(function(x){return x.id===id;}); if(!v)return; _editId.vendor=id; document.getElementById('modal-vendor-title').textContent='Edit Vendor'; ['vf-nama','vf-kat','vf-harga','vf-status','vf-kontak','vf-rating','vf-alamat','vf-catatan'].forEach(function(fid){var el=document.getElementById(fid);if(el)el.value=v[fid.replace('vf-','')]!=null?v[fid.replace('vf-','')]:'';}); openModal('modal-vendor'); }
-function saveVendor(){ var nama=document.getElementById('vf-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,kat:document.getElementById('vf-kat').value,harga:parseFloat(document.getElementById('vf-harga').value)||0,status:document.getElementById('vf-status').value,kontak:document.getElementById('vf-kontak').value,rating:parseInt(document.getElementById('vf-rating').value)||0,alamat:document.getElementById('vf-alamat').value,catatan:document.getElementById('vf-catatan').value}; if(_editId.vendor){var idx=db.vendor.findIndex(function(x){return x.id===_editId.vendor;});if(idx>=0)db.vendor[idx]=Object.assign({},db.vendor[idx],data);}else db.vendor.push(Object.assign({id:nextId('vnd','V')},data)); _editId.vendor=null;saveDB();closeModal('modal-vendor');renderVendor();toast('Vendor disimpan!'); }
-function hapusVendor(id){ if(!confirm('Hapus?'))return; db.vendor=db.vendor.filter(function(x){return x.id!==id;}); saveDB();renderVendor(); }
+function saveVendor(){ var nama=document.getElementById('vf-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,kat:document.getElementById('vf-kat').value,harga:parseFloat(document.getElementById('vf-harga').value)||0,status:document.getElementById('vf-status').value,kontak:document.getElementById('vf-kontak').value,rating:parseInt(document.getElementById('vf-rating').value)||0,alamat:document.getElementById('vf-alamat').value,catatan:document.getElementById('vf-catatan').value}; var id; if(_editId.vendor){var idx=db.vendor.findIndex(function(x){return x.id===_editId.vendor;});if(idx>=0){db.vendor[idx]=Object.assign({},db.vendor[idx],data);id=_editId.vendor;}}else{id=nextId('vnd','V');db.vendor.push(Object.assign({id:id},data));saveMeta('counters',db.counters);} _editId.vendor=null;saveDoc('vendor',id,db.vendor.find(function(x){return x.id===id;}));closeModal('modal-vendor');renderVendor();toast('Vendor disimpan!'); }
+function hapusVendor(id){ if(!confirm('Hapus?'))return; db.vendor=db.vendor.filter(function(x){return x.id!==id;}); deleteFireDoc('vendor',id);renderVendor(); }
 
 // ══════════════════════════════════════════════════════
 // TAMU
@@ -1622,8 +1795,8 @@ function renderTamu(){
   if(tbody) tbody.innerHTML=d.length?d.map(function(t){ return '<tr><td style="color:var(--text3)">'+(no++)+'</td><td><div style="font-weight:700">'+t.nama+'</div>'+(t.catatan?'<div style="font-size:11px;color:var(--text3)">'+t.catatan+'</div>':'')+'</td><td style="color:var(--text2)">'+t.kel+'</td><td style="text-align:center;font-weight:700">'+t.jml+'</td><td><span class="badge '+(bc[t.konfirm]||'b-pending')+'">'+t.konfirm+'</span></td><td style="color:var(--text3)">'+(t.kontak||'—')+'</td><td><span class="badge '+(t.undangan==='Sudah'?'b-done':'b-pending')+'">'+t.undangan+'</span></td><td><div style="display:flex;gap:5px"><button class="tb-btn" style="height:26px;font-size:10.5px;padding:0 8px" onclick="editTamu(\''+t.id+'\')">Edit</button><button class="tb-btn" style="height:26px;font-size:10.5px;padding:0 8px;color:var(--red)" onclick="hapusTamu(\''+t.id+'\')">Hapus</button></div></td></tr>'; }).join(''):'<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text3)">Tidak ada tamu</td></tr>';
 }
 function editTamu(id){ var t=db.tamu.find(function(x){return x.id===id;}); if(!t)return; _editId.tamu=id; document.getElementById('tf-nama').value=t.nama; document.getElementById('tf-kel').value=t.kel; document.getElementById('tf-jml').value=t.jml; document.getElementById('tf-konfirm').value=t.konfirm; document.getElementById('tf-kontak').value=t.kontak||''; document.getElementById('tf-undangan').value=t.undangan||'Belum'; document.getElementById('tf-catatan').value=t.catatan||''; openModal('modal-tamu'); }
-function saveTamu(){ var nama=document.getElementById('tf-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,kel:document.getElementById('tf-kel').value,jml:parseInt(document.getElementById('tf-jml').value)||1,konfirm:document.getElementById('tf-konfirm').value,kontak:document.getElementById('tf-kontak').value,undangan:document.getElementById('tf-undangan').value,catatan:document.getElementById('tf-catatan').value}; if(_editId.tamu){var idx=db.tamu.findIndex(function(x){return x.id===_editId.tamu;});if(idx>=0)db.tamu[idx]=Object.assign({},db.tamu[idx],data);}else db.tamu.push(Object.assign({id:nextId('tamu','TM')},data)); _editId.tamu=null;saveDB();closeModal('modal-tamu');renderTamu();toast('Tamu disimpan!'); }
-function hapusTamu(id){ if(!confirm('Hapus?'))return; db.tamu=db.tamu.filter(function(x){return x.id!==id;}); saveDB();renderTamu(); }
+function saveTamu(){ var nama=document.getElementById('tf-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,kel:document.getElementById('tf-kel').value,jml:parseInt(document.getElementById('tf-jml').value)||1,konfirm:document.getElementById('tf-konfirm').value,kontak:document.getElementById('tf-kontak').value,undangan:document.getElementById('tf-undangan').value,catatan:document.getElementById('tf-catatan').value}; var id; if(_editId.tamu){var idx=db.tamu.findIndex(function(x){return x.id===_editId.tamu;});if(idx>=0){db.tamu[idx]=Object.assign({},db.tamu[idx],data);id=_editId.tamu;}}else{id=nextId('tamu','TM');db.tamu.push(Object.assign({id:id},data));saveMeta('counters',db.counters);} _editId.tamu=null;saveDoc('tamu',id,db.tamu.find(function(x){return x.id===id;}));closeModal('modal-tamu');renderTamu();toast('Tamu disimpan!'); }
+function hapusTamu(id){ if(!confirm('Hapus?'))return; db.tamu=db.tamu.filter(function(x){return x.id!==id;}); deleteFireDoc('tamu',id);renderTamu(); }
 function importTamu(){ toast('Fitur import CSV segera hadir!','info'); }
 
 // ══════════════════════════════════════════════════════
@@ -1648,10 +1821,10 @@ function renderTimeline(){
   var tll=document.getElementById('tl-list');
   if(tll) tll.innerHTML=d.map(function(t){ var dl=daysLeft(t.deadline); var late2=t.deadline<today&&t.status!=='Selesai'; return '<div class="tl-item"><div class="tl-dot '+(t.status==='Selesai'?'done':late2?'late':'')+'"></div><div class="tl-box '+(t.status==='Selesai'?'done':'')+'" onclick="toggleTimeline(\''+t.id+'\')"><div class="tl-date">'+t.deadline+(late2?' <span style="color:var(--red);font-weight:700">· TERLAMBAT</span>':dl>=0&&t.status!=='Selesai'?' · '+dl+' hari lagi':'')+'</div><div style="display:flex;align-items:center;justify-content:space-between"><div class="tl-title">'+t.nama+'</div><div style="display:flex;gap:5px"><button onclick="event.stopPropagation();editTimeline(\''+t.id+'\')" class="tb-btn" style="height:22px;font-size:10px;padding:0 7px">Edit</button><button onclick="event.stopPropagation();hapusTimeline(\''+t.id+'\')" class="tb-btn" style="height:22px;font-size:10px;padding:0 7px;color:var(--red)">Hapus</button></div></div><div class="tl-desc">'+t.kat+' · <span class="badge '+(t.prioritas==='Tinggi'?'b-penting':t.prioritas==='Sedang'?'b-proses':'b-pending')+'">'+t.prioritas+'</span>'+(t.catatan?' · '+t.catatan:'')+'</div></div></div>'; }).join('');
 }
-function toggleTimeline(id){ var t=db.timeline.find(function(x){return x.id===id;}); if(!t)return; t.status=t.status==='Selesai'?'Belum':'Selesai'; saveDB();renderTimeline();toast(t.status==='Selesai'?'Selesai! ✓':'Ditandai belum.','info'); }
+function toggleTimeline(id){ var t=db.timeline.find(function(x){return x.id===id;}); if(!t)return; t.status=t.status==='Selesai'?'Belum':'Selesai'; saveDoc('timeline',id,t);renderTimeline();toast(t.status==='Selesai'?'Selesai! ✓':'Ditandai belum.','info'); }
 function editTimeline(id){ var t=db.timeline.find(function(x){return x.id===id;}); if(!t)return; _editId.timeline=id; document.getElementById('modal-tl-title').textContent='Edit Tugas'; document.getElementById('tlf-nama').value=t.nama; document.getElementById('tlf-deadline').value=t.deadline; document.getElementById('tlf-kat').value=t.kat; document.getElementById('tlf-prioritas').value=t.prioritas; document.getElementById('tlf-status').value=t.status; document.getElementById('tlf-catatan').value=t.catatan||''; openModal('modal-timeline'); }
-function saveTimeline(){ var nama=document.getElementById('tlf-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,deadline:document.getElementById('tlf-deadline').value,kat:document.getElementById('tlf-kat').value,prioritas:document.getElementById('tlf-prioritas').value,status:document.getElementById('tlf-status').value,catatan:document.getElementById('tlf-catatan').value}; if(_editId.timeline){var idx=db.timeline.findIndex(function(x){return x.id===_editId.timeline;});if(idx>=0)db.timeline[idx]=Object.assign({},db.timeline[idx],data);}else db.timeline.push(Object.assign({id:nextId('tl','TL')},data)); _editId.timeline=null;saveDB();closeModal('modal-timeline');renderTimeline();toast('Tugas disimpan!'); }
-function hapusTimeline(id){ if(!confirm('Hapus?'))return; db.timeline=db.timeline.filter(function(x){return x.id!==id;}); saveDB();renderTimeline(); }
+function saveTimeline(){ var nama=document.getElementById('tlf-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,deadline:document.getElementById('tlf-deadline').value,kat:document.getElementById('tlf-kat').value,prioritas:document.getElementById('tlf-prioritas').value,status:document.getElementById('tlf-status').value,catatan:document.getElementById('tlf-catatan').value}; var id; if(_editId.timeline){var idx=db.timeline.findIndex(function(x){return x.id===_editId.timeline;});if(idx>=0){db.timeline[idx]=Object.assign({},db.timeline[idx],data);id=_editId.timeline;}}else{id=nextId('tl','TL');db.timeline.push(Object.assign({id:id},data));saveMeta('counters',db.counters);} _editId.timeline=null;saveDoc('timeline',id,db.timeline.find(function(x){return x.id===id;}));closeModal('modal-timeline');renderTimeline();toast('Tugas disimpan!'); }
+function hapusTimeline(id){ if(!confirm('Hapus?'))return; db.timeline=db.timeline.filter(function(x){return x.id!==id;}); deleteFireDoc('timeline',id);renderTimeline(); }
 
 // ══════════════════════════════════════════════════════
 // LAPORAN
@@ -1729,13 +1902,13 @@ function renderPengaturan(){
   renderCloudSetup();
   var storage=(JSON.stringify(db).length/1024).toFixed(1);
   var si=document.getElementById('set-sysinfo');
-  if(si) si.innerHTML='<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Versi</span><span>maNTapps Wedding v2.0</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Item Budget</span><span>'+db.budget.length+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Vendor</span><span>'+db.vendor.length+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Total Tamu</span><span>'+db.tamu.reduce(function(s,t){return s+t.jml;},0)+' orang</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Dokumen Selesai</span><span>'+db.dokumen.filter(function(d){return d.status==='Selesai';}).length+'/'+db.dokumen.length+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12px"><span style="color:var(--text2)">Storage</span><span>'+storage+' KB</span></div>';
+  if(si) si.innerHTML='<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Versi</span><span>maNTapps Wedding v2 Firebase</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Status Cloud</span><span style="color:'+(_fs()&&_uid()?'var(--green)':'var(--amber)')+'">'+(_fs()&&_uid()?'🔥 Firebase Aktif':'⚡ Offline / Belum dikonfigurasi')+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Item Budget</span><span>'+db.budget.length+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Vendor</span><span>'+db.vendor.length+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Total Tamu</span><span>'+db.tamu.reduce(function(s,t){return s+t.jml;},0)+' orang</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Dokumen Selesai</span><span>'+db.dokumen.filter(function(d){return d.status==="Selesai";}).length+'/'+db.dokumen.length+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12px"><span style="color:var(--text2)">Storage</span><span>'+storage+' KB</span></div>'
+    +'<div style="margin-top:10px"><button onclick="refreshDariCloud()" style="width:100%;padding:9px;background:var(--blueDim);border:1.5px solid var(--blue4);border-radius:var(--r);color:var(--blue);font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer">☁ Refresh Data dari Firebase</button></div>';
   renderCloudSetupPanel();
 }
-function savePengaturan(){ db.setting.pria=document.getElementById('set-pria').value.trim(); db.setting.wanita=document.getElementById('set-wanita').value.trim(); db.setting.tglNikah=document.getElementById('set-tgl-nikah').value; db.setting.lokasi=document.getElementById('set-lokasi').value.trim(); db.setting.totalBudget=parseFloat(document.getElementById('set-total-budget').value)||0; saveDB(); toast('Profil pernikahan disimpan!'); renderPengaturan(); }
+function savePengaturan(){ db.setting.pria=document.getElementById('set-pria').value.trim(); db.setting.wanita=document.getElementById('set-wanita').value.trim(); db.setting.tglNikah=document.getElementById('set-tgl-nikah').value; db.setting.lokasi=document.getElementById('set-lokasi').value.trim(); db.setting.totalBudget=parseFloat(document.getElementById('set-total-budget').value)||0; saveMeta('setting',db.setting); toast('Profil pernikahan disimpan!'); renderPengaturan(); }
 function renderCloudSetup(){ var url=getScriptUrl(); var el=document.getElementById('cloud-url-input'); if(el) el.value=url; var st=document.getElementById('cloud-setup-status'); if(st) st.innerHTML=url?'<span style="color:var(--green)">☁️ Cloud aktif</span>':'<span style="color:var(--amber)">💾 Mode Lokal</span>'; }
-async function simpanScriptUrl(){ var el=document.getElementById('cloud-url-input'); var url=(el?el.value:'').trim(); if(!url){toast('Masukkan URL Apps Script!','err');return;} if(!url.startsWith('https://')){toast('URL harus diawali https://','err');return;} toast('Menguji koneksi…','info'); try{ var r=await fetch(url+'?action=ping',{redirect:'follow'}); var j=JSON.parse(await r.text()); if(j.ok){setScriptUrl(url);setSyncStatus('cloud');renderCloudSetup();toast('✓ Terhubung ke Google Sheets!');} else throw new Error('Respons tidak valid'); }catch(e){setSyncStatus('local');toast('Koneksi gagal. Periksa URL.','err');} }
-function hapusScriptUrl(){ if(!confirm('Hapus konfigurasi cloud?'))return; localStorage.removeItem(SCRIPT_URL_KEY); renderCloudSetup(); setSyncStatus('local'); toast('Konfigurasi cloud dihapus.','info'); }
+// simpanScriptUrl & hapusScriptUrl digantikan Firebase — tidak lagi digunakan
 
 // ══════════════════════════════════════════════════════
 // EKSPOR & BACKUP
@@ -1756,14 +1929,14 @@ function exportXLSX(){
   toast('XLSX berhasil diunduh!');
 }
 function backupJSON(){ var blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='maNTapps_Wedding_backup_'+nowDate()+'.json'; a.click(); toast('Backup berhasil!'); }
-function importJSON(){ var inp=document.createElement('input'); inp.type='file'; inp.accept='.json'; inp.onchange=function(e){ var fr=new FileReader(); fr.onload=function(ev){ try{ db=JSON.parse(ev.target.result); saveDB(); renderDashboard(); toast('Data diimport!'); }catch(e){ toast('File tidak valid!','err'); } }; fr.readAsText(e.target.files[0]); }; inp.click(); }
-function resetData(){ if(!confirm('Reset SEMUA data?'))return; if(!confirm('Konfirmasi: budget, dokumen, vendor, tamu, timeline akan dihapus?'))return; db=JSON.parse(JSON.stringify(DEFAULT_DB)); saveDB(); renderDashboard(); toast('Data direset.','info'); }
+function importJSON(){ var inp=document.createElement('input'); inp.type='file'; inp.accept='.json'; inp.onchange=function(e){ var fr=new FileReader(); fr.onload=function(ev){ try{ db=JSON.parse(ev.target.result); cacheLocal(); if(_fs()&&_uid()) uploadDefaultToFirebase().then(function(){toast('Data diimport & diunggah ke cloud! ✓');}); else toast('Data diimport!'); renderDashboard(); }catch(e){ toast('File tidak valid!','err'); } }; fr.readAsText(e.target.files[0]); }; inp.click(); }
+function resetData(){ if(!confirm('Reset SEMUA data?'))return; if(!confirm('Konfirmasi: budget, dokumen, vendor, tamu, timeline akan dihapus?'))return; db=JSON.parse(JSON.stringify(DEFAULT_DB)); cacheLocal(); if(_fs()&&_uid()) uploadDefaultToFirebase().catch(function(){}); renderDashboard(); toast('Data direset.','info'); }
 
 // ══════════════════════════════════════════════════════
 // SINKRON CODE
 // ══════════════════════════════════════════════════════
 function buatKodeSinkron(){ if(!currentUser){toast('Login dulu!','err');return;} try{ var payload={v:1,email:currentUser.email,nama:currentUser.nama,ts:Date.now(),db:db}; var encoded=btoa(unescape(encodeURIComponent(JSON.stringify(payload)))); var el=document.getElementById('sync-code-output'); if(el) el.value=encoded; toast('Kode sinkron dibuat!'); }catch(e){toast('Gagal buat kode sinkron','err');} }
-function importKodeSinkron(){ var kode=(document.getElementById('sync-code-input').value||'').trim(); if(!kode){toast('Masukkan kode sinkron!','err');return;} try{ var payload=JSON.parse(decodeURIComponent(escape(atob(kode)))); if(!payload.db||!payload.email){toast('Kode tidak valid!','err');return;} if(currentUser&&payload.email.toLowerCase()!==currentUser.email.toLowerCase()){ if(!confirm('Data ini milik akun '+payload.email+'. Import ke akun Anda?'))return; } db=payload.db; saveDB(); closeModal('modal-sinkron'); renderDashboard(); toast('Data berhasil diimport! ✓'); }catch(e){toast('Kode sinkron tidak valid!','err');} }
+function importKodeSinkron(){ var kode=(document.getElementById('sync-code-input').value||'').trim(); if(!kode){toast('Masukkan kode sinkron!','err');return;} try{ var payload=JSON.parse(decodeURIComponent(escape(atob(kode)))); if(!payload.db||!payload.email){toast('Kode tidak valid!','err');return;} if(currentUser&&payload.email.toLowerCase()!==currentUser.email.toLowerCase()){ if(!confirm('Data ini milik akun '+payload.email+'. Import ke akun Anda?'))return; } db=payload.db; cacheLocal(); if(_fs()&&_uid()) uploadDefaultToFirebase().then(function(){toast('Data sinkron diunggah ke cloud ✓');}); closeModal('modal-sinkron'); renderDashboard(); toast('Data berhasil diimport! ✓'); }catch(e){toast('Kode sinkron tidak valid!','err');} }
 function salinKodeSinkron(){ var el=document.getElementById('sync-code-output'); if(!el)return; el.select(); document.execCommand('copy'); toast('Kode sinkron disalin!'); }
 function switchSyncTab(tab){ var expSec=document.getElementById('sync-code-section'); var impSec=document.getElementById('sync-import-section'); var tabExp=document.getElementById('tab-export'); var tabImp=document.getElementById('tab-import'); if(expSec) expSec.style.display=tab==='export'?'block':'none'; if(impSec) impSec.style.display=tab==='import'?'block':'none'; if(tabExp) tabExp.classList.toggle('active',tab==='export'); if(tabImp) tabImp.classList.toggle('active',tab==='import'); if(tab==='export') buatKodeSinkron(); else{var inp=document.getElementById('sync-code-input');if(inp)inp.value='';} }
 
@@ -1786,38 +1959,63 @@ window.addEventListener('load', async function(){
   var le=document.getElementById('login-email');
   if(le) le.addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('login-pw').focus();});
 
-  // Load auth
-  showLoading(true,'Memuat data…');
-  await loadAuthAccounts();
-  showLoading(false);
+  // Load akun dari cache lokal
+  loadAuth_local();
 
-  // Apps Script code untuk panduan
-  var asc=document.getElementById('apps-script-code');
-  if(asc) asc.value="const SS_ID = SpreadsheetApp.getActiveSpreadsheet().getId();\nconst SHEET_NAME = 'maNTapps_DB';\n\nfunction getSheet(){\n  var ss=SpreadsheetApp.openById(SS_ID);\n  var sh=ss.getSheetByName(SHEET_NAME);\n  if(!sh){sh=ss.insertSheet(SHEET_NAME);sh.appendRow(['key','value','updated_at']);sh.getRange(1,1,1,3).setFontWeight('bold');}\n  return sh;\n}\n\nfunction doGet(e){\n  var action=e.parameter.action, key=e.parameter.key;\n  if(action==='ping') return jsonResp({ok:true,msg:'maNTapps Wedding DB aktif'});\n  if(action==='get'&&key){\n    var sh=getSheet(), data=sh.getDataRange().getValues();\n    for(var i=1;i<data.length;i++){if(data[i][0]===key)return jsonResp({ok:true,value:data[i][1]});}\n    return jsonResp({ok:true,value:null});\n  }\n  return jsonResp({ok:false,msg:'Action tidak dikenal'});\n}\n\nfunction doPost(e){\n  try{\n    var body=JSON.parse(e.postData.contents);\n    var action=body.action, key=body.key, value=body.value;\n    if(action==='set'&&key!==undefined&&value!==undefined){\n      var sh=getSheet(), data=sh.getDataRange().getValues();\n      var now=new Date().toLocaleString('id-ID');\n      for(var i=1;i<data.length;i++){\n        if(data[i][0]===key){sh.getRange(i+1,2).setValue(value);sh.getRange(i+1,3).setValue(now);return jsonResp({ok:true});}\n      }\n      sh.appendRow([key,value,now]);\n      return jsonResp({ok:true});\n    }\n    return jsonResp({ok:false,msg:'Parameter tidak lengkap'});\n  }catch(err){return jsonResp({ok:false,msg:err.message});}\n}\n\nfunction jsonResp(obj){\n  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);\n}";
+  // ── Callback: Firebase Auth state sudah siap & user masih login ──
+  window._onFbAuthReady = async function(fbUser) {
+    var raw = sessionStorage.getItem(AUTH_SESSION);
+    if (!raw) return;
+    try {
+      var sess = JSON.parse(raw);
+      if (!sess || !sess.email || (Date.now() - sess.ts) >= 86400000) return;
+      if (sess.email.toLowerCase() !== fbUser.email.toLowerCase()) return;
+      // Susun currentUser dari session + akun lokal
+      var accLokal = authAccounts.find(function(a){ return a.email.toLowerCase() === sess.email.toLowerCase(); });
+      currentUser = {
+        id:    fbUser.uid,
+        email: fbUser.email,
+        nama:  sess.nama || (accLokal ? accLokal.nama : fbUser.displayName || 'Pengguna'),
+        role:  accLokal ? accLokal.role : 'user',
+      };
+      document.getElementById('login-screen').style.display='none';
+      document.getElementById('app-shell').style.display='grid';
+      showLoading(true,'Memuat data dari cloud…');
+      await loadDBFromFirebase();
+      showLoading(false);
+      updateSidebarUser();
+      renderDashboard();
+      var lp=sessionStorage.getItem(AUTH_LASTPAGE);
+      if(lp&&lp!=='dashboard'){var btn=document.querySelector('[data-page="'+lp+'"]');if(btn)goPage(lp,btn);}
+    } catch(e) { sessionStorage.removeItem(AUTH_SESSION); }
+  };
 
-  // Restore session
-  var raw=sessionStorage.getItem(AUTH_SESSION);
-  if(raw){
-    try{
-      var sess=JSON.parse(raw);
-      if(sess&&sess.email&&(Date.now()-sess.ts)<86400000){
-        var acc=authAccounts.find(function(a){return a.email.toLowerCase()===sess.email.toLowerCase();});
-        if(acc){
-          currentUser=acc;
+  // ── Fallback: sesi lokal (Firebase belum dikonfigurasi / offline) ──
+  var raw = sessionStorage.getItem(AUTH_SESSION);
+  if (raw) {
+    try {
+      var sess = JSON.parse(raw);
+      if (sess && sess.email && (Date.now()-sess.ts) < 86400000) {
+        // Tunggu sebentar kalau Firebase sedang inisialisasi
+        await new Promise(function(resolve){ setTimeout(resolve, 1200); });
+        if (window._fbUser) return; // Firebase sudah handle via _onFbAuthReady
+        var acc = authAccounts.find(function(a){ return a.email.toLowerCase()===sess.email.toLowerCase(); });
+        if (acc) {
+          currentUser = acc;
           document.getElementById('login-screen').style.display='none';
           document.getElementById('app-shell').style.display='grid';
-          showLoading(true,'Memuat data Anda…');
-          await loadDBForUser(acc.email);
+          showLoading(true,'Memuat data…');
+          loadCacheLocal();
           showLoading(false);
           updateSidebarUser();
-          setSyncStatus(isCloud()?'cloud':'local');
+          setSyncStatus('local');
           renderDashboard();
           var lp=sessionStorage.getItem(AUTH_LASTPAGE);
           if(lp&&lp!=='dashboard'){var btn=document.querySelector('[data-page="'+lp+'"]');if(btn)goPage(lp,btn);}
           return;
         }
       }
-    }catch(e){ sessionStorage.removeItem(AUTH_SESSION); }
+    } catch(e) { sessionStorage.removeItem(AUTH_SESSION); }
   }
   renderAuthList();
 });
@@ -1828,120 +2026,37 @@ document.addEventListener('keydown',function(e){
 });
 
 // ══════════════════════════════════════════════════════
-// CLOUD SYNC — fungsi lengkap
+// FIREBASE CLOUD STATUS — render status di Pengaturan
 // ══════════════════════════════════════════════════════
-
-function cloudSaveDB(email){
-  const key = 'mw_db_' + (email||'guest').toLowerCase().replace(/[^a-z0-9]/g,'_');
-  return cloudSet(key, JSON.stringify(db));
-}
-
-async function cloudLoadDB(email){
-  const key = 'mw_db_' + (email||'guest').toLowerCase().replace(/[^a-z0-9]/g,'_');
-  const raw = await cloudGet(key);
-  if(raw){ try{ db = JSON.parse(raw); return true; }catch(e){} }
-  return false;
-}
-
-async function cloudSaveAuth(accounts){
-  return cloudSet('mw_auth_accounts', JSON.stringify(accounts));
-}
-
-async function cloudLoadAuth(){
-  const raw = await cloudGet('mw_auth_accounts');
-  if(raw){ try{ authAccounts = JSON.parse(raw); saveAuth(authAccounts); return true; }catch(e){} }
-  return false;
-}
-
 function renderCloudSetupPanel(){
-  const url = getScriptUrl();
-  const inp = document.getElementById('cloud-url-input');
   const st  = document.getElementById('cloud-conn-status');
-  if(inp) inp.value = url;
-  if(st)  st.innerHTML = url
-    ? '<span style="color:var(--green)">☁️ Terhubung ke Google Sheets</span>'
-    : '<span style="color:var(--amber)">💾 Mode Lokal — belum terhubung</span>';
-}
-
-async function simpanCloudUrl(){
   const inp = document.getElementById('cloud-url-input');
-  const url = (inp ? inp.value : '').trim();
-  if(!url){ toast('Masukkan URL Apps Script!','err'); return; }
-  if(!url.startsWith('https://')){ toast('URL harus diawali https://','err'); return; }
-  toast('Menguji koneksi ke cloud…','info');
-  try{
-    const r = await fetch(url + '?action=ping', {redirect:'follow'});
-    const j = JSON.parse(await r.text());
-    if(j.ok){
-      setScriptUrl(url);
-      setSyncStatus('cloud');
-      renderCloudSetupPanel();
-      toast('✓ Berhasil terhubung ke Google Sheets!');
-    } else { throw new Error(j.msg||'Respons tidak valid'); }
-  }catch(e){
-    setSyncStatus('local');
-    toast('Koneksi gagal: ' + e.message,'err');
-  }
+  const isConn = _fs() && _uid();
+  if(inp) inp.value = isConn ? '🔥 Firebase Firestore aktif' : '(belum terhubung)';
+  if(st)  st.innerHTML = isConn
+    ? '<span style="color:var(--green)">🔥 Terhubung ke Firebase Firestore</span>'
+    : '<span style="color:var(--amber)">💾 Mode Offline — isi FIREBASE_CONFIG di kode</span>';
 }
 
-function hapusCloudUrl(){
-  if(!confirm('Hapus konfigurasi cloud?')) return;
-  localStorage.removeItem(SCRIPT_URL_KEY);
-  renderCloudSetupPanel();
-  setSyncStatus('local');
-  toast('Konfigurasi cloud dihapus.','info');
-}
+// Fungsi stub (tidak lagi dipakai — digantikan Firebase)
+function simpanCloudUrl(){ toast('Konfigurasi sekarang via FIREBASE_CONFIG di file HTML.','info'); }
+function hapusCloudUrl(){ toast('Hapus konfigurasi via Firebase Console.','info'); }
+function renderSwCloudStatus(){ renderCloudSetupPanel(); }
+function simpanSwCloudUrl(){ simpanCloudUrl(); }
+function hapusSwCloudUrl(){ hapusCloudUrl(); }
 
-// Patch renderPengaturan agar tampilkan cloud status
-// renderCloudSetupPanel dipanggil otomatis dari renderPengaturan
-
-
-// ── Sinkronisasi Modal Functions ──
-const SW_CLOUD_KEY  = 'mw_sw_cloud_url';
-
-function getSwCloudUrl(){ return localStorage.getItem(SW_CLOUD_KEY) || getScriptUrl() || ''; }
-function setSwCloudUrl(u){ localStorage.setItem(SW_CLOUD_KEY, u.trim()); setScriptUrl(u.trim()); }
-
-function renderSwCloudStatus(){
-  const url = getSwCloudUrl();
-  const el  = document.getElementById('sw-conn-status');
-  if(el) el.innerHTML = url
-    ? '<span style="color:var(--green)">☁️ Terhubung ke Google Sheets</span>'
-    : '<span style="color:var(--amber)">💾 Mode Lokal — belum terhubung</span>';
-  const inp = document.getElementById('sw-cloud-url');
-  if(inp) inp.value = url;
-}
-
-async function simpanSwCloudUrl(){
-  const inp = document.getElementById('sw-cloud-url');
-  const url = (inp ? inp.value : '').trim();
-  if(!url){ toast('Masukkan URL Apps Script!','err'); return; }
-  if(!url.startsWith('https://')){ toast('URL harus diawali https://','err'); return; }
-  toast('Menguji koneksi…','info');
-  try{
-    const r = await fetch(url + '?action=ping', {redirect:'follow'});
-    const j = JSON.parse(await r.text());
-    if(j.ok){
-      setSwCloudUrl(url);
-      setSyncStatus('cloud');
-      renderSwCloudStatus();
-      renderCloudSetupPanel();
-      toast('✓ Berhasil terhubung ke Google Sheets!');
-    } else throw new Error(j.msg||'Respons tidak valid');
-  }catch(e){
-    setSyncStatus('local');
-    toast('Koneksi gagal: ' + e.message,'err');
-  }
-}
-
-function hapusSwCloudUrl(){
-  if(!confirm('Hapus konfigurasi cloud?')) return;
-  localStorage.removeItem(SW_CLOUD_KEY);
-  localStorage.removeItem(SCRIPT_URL_KEY);
-  renderSwCloudStatus();
-  renderCloudSetupPanel();
-  setSyncStatus('local');
-  toast('Konfigurasi cloud dihapus.','info');
+// Tambah tombol Refresh dari Cloud di Pengaturan
+function refreshDariCloud(){
+  if(!_fs()||!_uid()){ toast('Firebase tidak tersedia.','err'); return; }
+  if(!confirm('Muat ulang semua data dari Firebase Cloud?')) return;
+  showLoading(true,'Memuat dari cloud…');
+  loadDBFromFirebase().then(function(){
+    showLoading(false);
+    renderDashboard();
+    var lp=sessionStorage.getItem(AUTH_LASTPAGE);
+    var renders={budget:renderBudget,dokumen:renderDokumen,vendor:renderVendor,tamu:renderTamu,timeline:renderTimeline,laporan:renderLaporan,pengaturan:renderPengaturan};
+    if(lp&&renders[lp]) renders[lp]();
+  });
 }
 
 function switchSyncTab(tab){
@@ -1985,7 +2100,8 @@ function importKodeSinkron(){
       if(!confirm('Kode ini dari aplikasi '+payload.app+'. Tetap import ke Wedding?')) return;
     }
     db = payload.db;
-    saveDB();
+    cacheLocal();
+    if(_fs()&&_uid()) uploadDefaultToFirebase().then(function(){toast('Data cloud diunggah ✓');});
     closeModal('modal-cloud-sync');
     renderDashboard();
     toast('Data berhasil diimport dari kode sinkron ✓');
