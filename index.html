@@ -6,49 +6,6 @@
 <title>maNTapps Wedding — Budgeting Pernikahan</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,600&family=Nunito:wght@300;400;500;600;700;800&family=Nunito+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<!-- ═══════════════════════════════════════════════════════
-     FIREBASE v10 SDK
-     Ganti FIREBASE_CONFIG di bawah dengan config project Anda!
-     Firebase Console → Project Settings → Your Apps → SDK Config
-     ═══════════════════════════════════════════════════════ -->
-<script type="module">
-import { initializeApp }                    from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getAuth, signInWithEmailAndPassword, signOut,
-         createUserWithEmailAndPassword, onAuthStateChanged }
-                                             from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getFirestore, doc, getDoc, setDoc, deleteDoc,
-         collection, getDocs, writeBatch, serverTimestamp }
-                                             from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-
-// ── GANTI BAGIAN INI dengan config Firebase Anda ──
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyCJayt0NVECghIAJJKEG3HKbESpSU0Qd-M",
-  authDomain: "mantapps-wedding.firebaseapp.com",
-  projectId: "mantapps-wedding",
-  storageBucket: "mantapps-wedding.firebasestorage.app",
-  messagingSenderId: "456526363504",
-  appId: "1:456526363504:web:0c6e2b6c5ed41837e36db5",
-  measurementId: "G-QZR7W42BG3"
-};
-const _app  = initializeApp(FIREBASE_CONFIG);
-const _auth = getAuth(_app);
-const _fsdb = getFirestore(_app);
-
-// Expose ke global scope agar fungsi non-module bisa akses
-window._fb = { _auth, _fsdb, doc, getDoc, setDoc, deleteDoc,
-               collection, getDocs, writeBatch, serverTimestamp,
-               signInWithEmailAndPassword, signOut,
-               createUserWithEmailAndPassword };
-
-// Monitor auth state
-onAuthStateChanged(_auth, user => {
-  window._fbUser = user || null;
-  if (user && typeof window._onFbAuthReady === 'function') {
-    window._onFbAuthReady(user);
-  }
-});
-</script>
 <style>
 :root{
   /* Palette biru muda soft luxury */
@@ -429,6 +386,12 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13
       <div id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:var(--green)"></div>
       <span id="sync-txt">Tersimpan</span>
     </div>
+    <button class="tb-btn" onclick="openModal('modal-sinkron');switchSyncTab('export')" style="display:flex;align-items:center;gap:6px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Sinkron
+    </button>
+    <button class="tb-btn" onclick="openModalSync()" style="display:flex;align-items:center;gap:6px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Sinkron
+    </button>
     <button class="tb-btn" onclick="exportXLSX()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Ekspor XLSX
     </button>
@@ -613,6 +576,17 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13
     </div>
     <div>
       <div class="card" style="margin-bottom:16px">
+        <div class="card-hdr"><span class="card-title">☁️ Firebase Database</span></div>
+        <div style="background:var(--blueDim);border:1px solid var(--blue4);border-radius:var(--r);padding:10px 14px;font-size:12px;color:var(--blue2);line-height:1.7;margin-bottom:10px">
+          Data tersimpan otomatis ke <strong>Firebase Realtime Database</strong> milik Google setiap kali ada perubahan. Dapat diakses dari device manapun setelah login.
+        </div>
+        <div id="cloud-status-card" style="margin-bottom:12px"></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--greenDim);border:1px solid #6ee7b7;border-radius:var(--r)">
+          <div style="width:8px;height:8px;background:var(--green);border-radius:50%;box-shadow:0 0 6px var(--green)"></div>
+          <span style="font-size:12px;font-weight:600;color:var(--green)" id="firebase-status-txt">Terhubung ke Firebase ☁️</span>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:16px">
         <div class="card-hdr"><span class="card-title">Info Sistem</span></div>
         <div id="set-sysinfo"></div>
       </div>
@@ -620,6 +594,10 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13
         <div class="card-hdr"><span class="card-title">Manajemen Data</span></div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <button class="btn-blue" style="width:100%;height:38px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:7px" onclick="openModal('modal-sinkron');switchSyncTab('export')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Sinkronisasi Antar Device
+          </button>
+          <button class="tb-btn" style="height:38px;justify-content:center;display:flex;align-items:center;gap:7px;color:var(--blue);border-color:var(--blueDim)" onclick="openModalSync()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             Sinkronisasi Antar Device
           </button>
@@ -873,13 +851,24 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13
 <script>
 
 // ══════════════════════════════════════════════════════
-// KONSTANTA — Firebase sebagai database utama
-// localStorage hanya sebagai cache offline
+// FIREBASE CONFIG
 // ══════════════════════════════════════════════════════
-const DB_KEY        = 'mw_db_v1';        // cache offline key
-const AUTH_KEY      = 'mw_auth_v2';      // cache akun lokal
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCJayt0NVECghIAJJKEG3HKbESpSU0Qd-M",
+  authDomain: "mantapps-wedding.firebaseapp.com",
+  databaseURL: "https://mantapps-wedding-default-rtdb.firebaseio.com",
+  projectId: "mantapps-wedding",
+  storageBucket: "mantapps-wedding.firebasestorage.app",
+  messagingSenderId: "456526363504",
+  appId: "1:456526363504:web:0c6e2b6c5ed41837e36db5",
+  measurementId: "G-QZR7W42BG3"
+};
+
 const AUTH_SESSION  = 'mw_sess_v1';
 const AUTH_LASTPAGE = 'mw_page_v1';
+
+// Firebase refs
+let fbApp, fbDB, fbRef, fbAccRef;
 
 // ══════════════════════════════════════════════════════
 // DEFAULT DATA
@@ -950,174 +939,53 @@ let _lupaEmail   = '';
 // UTILITIES
 // ══════════════════════════════════════════════════════
 // ══════════════════════════════════════════════════════
-// FIREBASE HELPERS
+// FIREBASE DB FUNCTIONS
 // ══════════════════════════════════════════════════════
-function _fs()     { return window._fb?._fsdb || null; }
-function _uid()    { return window._fbUser?.uid || null; }
-function _base()   { return _uid() ? `weddings/${_uid()}` : null; }
-
-// Firestore: weddings/{uid}/data/{koleksi}/{docId}
-//            weddings/{uid}/meta/setting
-//            weddings/{uid}/meta/counters
-
-async function fbGetAll(koleksi) {
-  if (!_fs() || !_uid()) return [];
-  try {
-    const { collection, getDocs } = window._fb;
-    const snap = await getDocs(collection(_fs(), _base(), koleksi));
-    return snap.docs.map(d => { const x = d.data(); delete x._ts; return x; });
-  } catch(e) { console.warn('fbGetAll', koleksi, e); return []; }
-}
-
-async function fbSet(koleksi, id, data) {
-  if (!_fs() || !_uid()) return;
-  try {
-    const { doc, setDoc, serverTimestamp } = window._fb;
-    const ref = id
-      ? doc(_fs(), _base(), koleksi, id)
-      : doc(_fs(), _base(), 'meta', koleksi);
-    await setDoc(ref, { ...data, _ts: serverTimestamp() }, { merge: true });
-  } catch(e) { console.warn('fbSet', koleksi, id, e); }
-}
-
-async function fbDelete(koleksi, id) {
-  if (!_fs() || !_uid()) return;
-  try {
-    const { doc, deleteDoc } = window._fb;
-    await deleteDoc(doc(_fs(), _base(), koleksi, id));
-  } catch(e) { console.warn('fbDelete', e); }
-}
-
-async function fbGetMeta(key) {
-  if (!_fs() || !_uid()) return null;
-  try {
-    const { doc, getDoc } = window._fb;
-    const snap = await getDoc(doc(_fs(), _base(), 'meta', key));
-    if (!snap.exists()) return null;
-    const x = snap.data(); delete x._ts; return x;
-  } catch(e) { console.warn('fbGetMeta', key, e); return null; }
-}
-
-// Muat seluruh DB dari Firestore
-async function loadDBFromFirebase() {
-  try {
-    setSyncStatus('loading');
-    const [budget, dokumen, vendor, tamu, timeline, setting, counters] = await Promise.all([
-      fbGetAll('budget'), fbGetAll('dokumen'), fbGetAll('vendor'),
-      fbGetAll('tamu'),   fbGetAll('timeline'),
-      fbGetMeta('setting'), fbGetMeta('counters'),
-    ]);
-    const adaData = budget.length || dokumen.length || vendor.length || tamu.length;
-    if (adaData) {
-      db.budget   = budget;
-      db.dokumen  = dokumen;
-      db.vendor   = vendor;
-      db.tamu     = tamu;
-      db.timeline = timeline;
-      if (setting)  db.setting  = { ...db.setting,  ...setting  };
-      if (counters) db.counters = { ...db.counters, ...counters };
-      cacheLocal();
-      setSyncStatus('cloud');
-      toast('Data cloud berhasil dimuat ☁️');
-    } else {
-      // Akun baru — upload DEFAULT_DB ke Firestore
-      await uploadDefaultToFirebase();
-      setSyncStatus('cloud');
-      toast('Akun baru! Data awal diunggah ke cloud ✓');
-    }
-  } catch(e) {
-    console.error('loadDBFromFirebase error', e);
-    loadCacheLocal();
-    setSyncStatus('local');
-    toast('Gagal muat cloud, pakai data lokal','err');
-  }
-}
-
-// Upload DEFAULT_DB ke Firestore (akun baru / reset)
-async function uploadDefaultToFirebase() {
-  if (!_fs() || !_uid()) return;
-  const { writeBatch, doc, serverTimestamp } = window._fb;
-  const batch = writeBatch(_fs());
-  const base  = _base();
-  const ts    = serverTimestamp();
-  db.budget.forEach   (x => batch.set(doc(_fs(), base, 'budget',   x.id), { ...x, _ts: ts }));
-  db.dokumen.forEach  (x => batch.set(doc(_fs(), base, 'dokumen',  x.id), { ...x, _ts: ts }));
-  db.vendor.forEach   (x => batch.set(doc(_fs(), base, 'vendor',   x.id), { ...x, _ts: ts }));
-  db.tamu.forEach     (x => batch.set(doc(_fs(), base, 'tamu',     x.id), { ...x, _ts: ts }));
-  db.timeline.forEach (x => batch.set(doc(_fs(), base, 'timeline', x.id), { ...x, _ts: ts }));
-  batch.set(doc(_fs(), base, 'meta', 'setting'),  { ...db.setting,  _ts: ts });
-  batch.set(doc(_fs(), base, 'meta', 'counters'), { ...db.counters, _ts: ts });
-  await batch.commit();
-}
-
-// Cache & restore lokal (offline fallback)
-function cacheLocal() {
-  try {
-    const key = currentUser ? 'mw_db_' + currentUser.email.replace(/[^a-z0-9]/gi,'_') : DB_KEY;
-    localStorage.setItem(key, JSON.stringify(db));
-  } catch(e) {}
-}
-function loadCacheLocal() {
-  try {
-    if (!currentUser) return;
-    const key = 'mw_db_' + currentUser.email.replace(/[^a-z0-9]/gi,'_');
-    const r = localStorage.getItem(key);
-    if (r) { db = JSON.parse(r); return true; }
-  } catch(e) {}
-  db = JSON.parse(JSON.stringify(DEFAULT_DB));
-  return false;
-}
-
-// ── saveDB: simpan lokal + kirim ke Firestore (non-blocking) ──
-function saveDB() {
+function saveDB(){
   setSyncStatus('saving');
-  cacheLocal();
-  if (!_fs() || !_uid()) { setSyncStatus('local'); return; }
-  setSyncStatus('cloud');
+  if(!fbRef){ setSyncStatus('local'); return; }
+  const key = currentUser ? 'db_' + currentUser.email.replace(/[^a-z0-9]/gi,'_') : 'db_guest';
+  fbRef.child(key).set(db)
+    .then(()  => setSyncStatus('cloud'))
+    .catch(e  => { console.error(e); setSyncStatus('error'); toast('Gagal simpan ke Firebase!','err'); });
 }
 
-// ── saveDoc: simpan satu dokumen ke Firestore ──
-function saveDoc(koleksi, id, data) {
-  cacheLocal();
-  if (!_fs() || !_uid()) return;
-  fbSet(koleksi, id, data).catch(e => console.warn('saveDoc', e));
-}
-
-// ── saveMeta: simpan setting/counters ──
-function saveMeta(key, data) {
-  cacheLocal();
-  if (!_fs() || !_uid()) return;
-  fbSet(key, null, data).catch(e => console.warn('saveMeta', e));
-}
-
-// ── deleteDoc: hapus dari Firestore ──
-function deleteFireDoc(koleksi, id) {
-  cacheLocal();
-  if (!_fs() || !_uid()) return;
-  fbDelete(koleksi, id).catch(e => console.warn('deleteFireDoc', e));
-}
-
-// ── Auth accounts: simpan di Firestore per-user ──
-function loadAuth_local() {
+async function loadDBForUser(email){
+  setSyncStatus('loading');
+  if(!fbRef){ db = JSON.parse(JSON.stringify(DEFAULT_DB)); setSyncStatus('local'); return; }
+  const key = 'db_' + email.replace(/[^a-z0-9]/gi,'_');
   try {
-    const r = localStorage.getItem(AUTH_KEY);
-    if (r) { authAccounts = JSON.parse(r); }
-  } catch(e) {}
-}
-async function saveAuth(a) {
-  authAccounts = a;
-  try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e) {}
-  // Profile (tanpa password) ke Firestore
-  if (_fs() && _uid()) {
-    a.forEach(acc => {
-      const safe = { id:acc.id, nama:acc.nama, email:acc.email, role:acc.role, tgl:acc.tgl, lastLogin:acc.lastLogin||null };
-      fbSet('accounts', acc.id, safe).catch(()=>{});
-    });
+    const snap = await fbRef.child(key).once('value');
+    const data = snap.val();
+    if(data){ db = data; setSyncStatus('cloud'); }
+    else { db = JSON.parse(JSON.stringify(DEFAULT_DB)); saveDB(); setSyncStatus('cloud'); }
+  } catch(e) {
+    console.error(e);
+    db = JSON.parse(JSON.stringify(DEFAULT_DB));
+    setSyncStatus('error');
   }
 }
 
-function getScriptUrl() { return ''; }  // Google Sheets tidak lagi digunakan
-function isCloud()      { return !!(_fs() && _uid()); }
+async function loadAuthAccounts(){
+  if(!fbAccRef){ return; }
+  try {
+    const snap = await fbAccRef.once('value');
+    const data = snap.val();
+    if(data && Array.isArray(data) && data.length > 0){ authAccounts = data; }
+    else {
+      // Seed akun admin default pertama kali
+      authAccounts = [{id:'USR001',nama:'Admin',email:'admin@wedding.com',pw:'1234',role:'owner',kode:'WEDDING2024',tgl:'2026-04-01',lastLogin:null}];
+      fbAccRef.set(authAccounts);
+    }
+  } catch(e) { console.error('loadAuthAccounts error:', e); }
+}
+
+async function saveAuth(a){
+  authAccounts = a;
+  if(fbAccRef){
+    fbAccRef.set(a).catch(e => { console.error('saveAuth error:', e); toast('Gagal simpan akun!','err'); });
+  }
+}
 
 // ── Sync status indicator ──
 function setSyncStatus(state){
@@ -1127,14 +995,14 @@ function setSyncStatus(state){
   const txt2 = document.getElementById('cloud-sync-txt');
   const map = {
     saving:  ['#f59e0b','Menyimpan…'],
-    local:   ['#94a3b8','Mode Offline'],
-    cloud:   ['#2563eb','Tersimpan ☁ Firebase'],
+    local:   ['#94a3b8','Offline'],
+    cloud:   ['#2563eb','Tersimpan Firebase ☁️'],
     loading: ['#f59e0b','Memuat…'],
     error:   ['#ef4444','Gagal!'],
   };
   const [col, lbl] = map[state]||map.local;
-  dot.style.background = col;
-  txt.textContent = lbl;
+  if(dot) dot.style.background = col;
+  if(txt) txt.textContent = lbl;
   if(dot2) dot2.style.background = col;
   if(txt2) txt2.textContent = lbl;
 }
@@ -1263,38 +1131,6 @@ async function doLogin(){
   if(!email)              { showAuthErr('login-err','Email wajib diisi.');        return; }
   if(!isValidEmail(email)){ showAuthErr('login-err','Format email tidak valid.'); return; }
   if(!pw)                 { showAuthErr('login-err','Password wajib diisi.');     return; }
-
-  // ── Coba Firebase Auth ──
-  const fb = window._fb;
-  if (fb && fb.signInWithEmailAndPassword) {
-    try {
-      const cred = await fb.signInWithEmailAndPassword(fb._auth, email, pw);
-      // Cari nama dari cache lokal
-      const accLokal = authAccounts.find(a => a.email.toLowerCase() === email);
-      currentUser = {
-        id:    cred.user.uid,
-        email: cred.user.email,
-        nama:  accLokal ? accLokal.nama : (cred.user.displayName || 'Pengguna'),
-        role:  accLokal ? accLokal.role : 'user',
-      };
-      if (accLokal) { accLokal.lastLogin = nowStr(); await saveAuth(authAccounts); }
-      await masukAplikasi();
-      return;
-    } catch(err) {
-      const fbErrors = {
-        'auth/invalid-credential':    'Email atau password salah.',
-        'auth/user-not-found':        'Email tidak terdaftar.',
-        'auth/wrong-password':        'Password salah.',
-        'auth/too-many-requests':     'Terlalu banyak percobaan, coba lagi nanti.',
-        'auth/invalid-email':         'Format email tidak valid.',
-      };
-      if (fbErrors[err.code]) { showAuthErr('login-err', fbErrors[err.code]); return; }
-      // Firebase belum dikonfigurasi / offline → fallback lokal
-      console.warn('Firebase Auth tidak tersedia, fallback lokal:', err.code);
-    }
-  }
-
-  // ── Fallback: login lokal (offline / Firebase belum diisi) ──
   var acc = authAccounts.find(function(a){ return a.email.toLowerCase()===email && a.pw===pw; });
   if(!acc){ showAuthErr('login-err','Email atau password tidak cocok.'); return; }
   acc.lastLogin = nowStr();
@@ -1306,25 +1142,14 @@ async function doLogin(){
 async function masukAplikasi(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app-shell').style.display='grid';
-
-  showLoading(true, 'Memuat data dari cloud…');
-
-  // Simpan sesi
+  showLoading(true, 'Memuat data dari Firebase…');
+  await loadDBForUser(currentUser.email);
+  showLoading(false);
   sessionStorage.setItem(AUTH_SESSION, JSON.stringify({
     email: currentUser.email,
     nama:  currentUser.nama,
     ts:    Date.now()
   }));
-
-  // Muat dari Firestore jika tersedia, fallback lokal
-  if (_fs() && _uid()) {
-    await loadDBFromFirebase();
-  } else {
-    loadCacheLocal();
-    setSyncStatus('local');
-  }
-
-  showLoading(false);
   updateSidebarUser();
   renderDashboard();
   const lp = sessionStorage.getItem(AUTH_LASTPAGE);
@@ -1335,14 +1160,10 @@ async function masukAplikasi(){
   toast('Halo ' + currentUser.nama + '! 👋');
 }
 
-async function doLogout(){
+function doLogout(){
   if(!confirm('Keluar dari aplikasi?')) return;
   sessionStorage.removeItem(AUTH_SESSION);
   sessionStorage.removeItem(AUTH_LASTPAGE);
-  const fb = window._fb;
-  if (fb && fb.signOut) {
-    try { await fb.signOut(fb._auth); } catch(e) { console.warn('signOut error', e); }
-  }
   currentUser = null;
   document.getElementById('app-shell').style.display='none';
   document.getElementById('login-screen').style.display='flex';
@@ -1410,29 +1231,9 @@ async function buatAkun(){
   if(authAccounts.find(function(a){ return a.email.toLowerCase()===email; })){
     showAuthErr('daftar-err','Email sudah terdaftar.'); return;
   }
-
-  // ── Daftarkan ke Firebase Auth ──
-  const fb = window._fb;
-  if (fb && fb.createUserWithEmailAndPassword) {
-    try {
-      await fb.createUserWithEmailAndPassword(fb._auth, email, pw);
-    } catch(err) {
-      const fbErrors = {
-        'auth/email-already-in-use': 'Email sudah terdaftar di Firebase.',
-        'auth/weak-password':        'Password terlalu lemah.',
-        'auth/invalid-email':        'Format email tidak valid.',
-      };
-      if (fbErrors[err.code]) { showAuthErr('daftar-err', fbErrors[err.code]); return; }
-      if (err.code !== 'auth/configuration-not-found' && err.code !== 'auth/network-request-failed') {
-        console.warn('Firebase createUser error:', err.code);
-      }
-    }
-  }
-
   var newAcc = {id:'USR'+String(authAccounts.length+1).padStart(3,'0'),nama:nama,email:email,pw:pw,role:role,kode:kode,tgl:nowDate(),lastLogin:null};
   authAccounts.push(newAcc);
   await saveAuth(authAccounts);
-  // Ekspor XLSX daftar pengguna
   try{
     var wb=XLSX.utils.book_new();
     var rows=[['maNTapps Wedding — Users','','','','',''],['Ekspor: '+nowStr(),'','','','',''],[''],
@@ -1637,14 +1438,11 @@ function saveBudget(){
   var nama=document.getElementById('bf-nama').value.trim();
   if(!nama){toast('Nama item wajib!','err');return;}
   var data={nama:nama,kat:document.getElementById('bf-kat').value,budget:parseFloat(document.getElementById('bf-budget').value)||0,realisasi:parseFloat(document.getElementById('bf-realisasi').value)||0,status:document.getElementById('bf-status').value,vendor:document.getElementById('bf-vendor').value,catatan:document.getElementById('bf-catatan').value};
-  var id;
-  if(_editId.budget){var idx=db.budget.findIndex(function(x){return x.id===_editId.budget;});if(idx>=0){db.budget[idx]=Object.assign({},db.budget[idx],data);id=_editId.budget;}}
-  else{id=nextId('bud','B');db.budget.push(Object.assign({id:id},data));saveMeta('counters',db.counters);}
-  _editId.budget=null;
-  saveDoc('budget', id, db.budget.find(function(x){return x.id===id;}));
-  closeModal('modal-budget');renderBudget();toast('Budget disimpan!');
+  if(_editId.budget){var idx=db.budget.findIndex(function(x){return x.id===_editId.budget;});if(idx>=0)db.budget[idx]=Object.assign({},db.budget[idx],data);}
+  else db.budget.push(Object.assign({id:nextId('bud','B')},data));
+  _editId.budget=null;saveDB();closeModal('modal-budget');renderBudget();toast('Budget disimpan!');
 }
-function hapusBudget(id){if(!confirm('Hapus?'))return;db.budget=db.budget.filter(function(x){return x.id!==id;});deleteFireDoc('budget',id);renderBudget();}
+function hapusBudget(id){if(!confirm('Hapus?'))return;db.budget=db.budget.filter(function(x){return x.id!==id;});saveDB();renderBudget();}
 
 // ══════════════════════════════════════════════════════
 // DOKUMEN
@@ -1683,10 +1481,10 @@ function renderDokumen(){
   }).join('');
   var bd=document.getElementById('badge-dokumen'); if(bd) bd.textContent=db.dokumen.length-selesai;
 }
-function toggleDokumen(id){ var d=db.dokumen.find(function(x){return x.id===id;}); if(!d)return; d.status=d.status==='Selesai'?'Belum Diurus':'Selesai'; saveDoc('dokumen',id,d);renderDokumen();toast(d.status==='Selesai'?'Selesai! ✓':'Ditandai belum.','info'); }
+function toggleDokumen(id){ var d=db.dokumen.find(function(x){return x.id===id;}); if(!d)return; d.status=d.status==='Selesai'?'Belum Diurus':'Selesai'; saveDB();renderDokumen();toast(d.status==='Selesai'?'Selesai! ✓':'Ditandai belum.','info'); }
 function editDokumen(id){ var d=db.dokumen.find(function(x){return x.id===id;}); if(!d)return; _editId.dokumen=id; document.getElementById('df-nama').value=d.nama; document.getElementById('df-jenis').value=d.jenis; document.getElementById('df-untuk').value=d.untuk; document.getElementById('df-deadline').value=d.deadline||''; document.getElementById('df-status').value=d.status; document.getElementById('df-prioritas').value=d.prioritas; document.getElementById('df-catatan').value=d.catatan||''; openModal('modal-dokumen'); }
-function saveDokumen(){ var nama=document.getElementById('df-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,jenis:document.getElementById('df-jenis').value,untuk:document.getElementById('df-untuk').value,deadline:document.getElementById('df-deadline').value,status:document.getElementById('df-status').value,prioritas:document.getElementById('df-prioritas').value,catatan:document.getElementById('df-catatan').value}; var id; if(_editId.dokumen){var idx=db.dokumen.findIndex(function(x){return x.id===_editId.dokumen;});if(idx>=0){db.dokumen[idx]=Object.assign({},db.dokumen[idx],data);id=_editId.dokumen;}}else{id=nextId('dok','D');db.dokumen.push(Object.assign({id:id},data));saveMeta('counters',db.counters);} _editId.dokumen=null;saveDoc('dokumen',id,db.dokumen.find(function(x){return x.id===id;}));closeModal('modal-dokumen');renderDokumen();toast('Dokumen disimpan!'); }
-function hapusDokumen(id){ if(!confirm('Hapus?'))return; db.dokumen=db.dokumen.filter(function(x){return x.id!==id;}); deleteFireDoc('dokumen',id);renderDokumen(); }
+function saveDokumen(){ var nama=document.getElementById('df-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,jenis:document.getElementById('df-jenis').value,untuk:document.getElementById('df-untuk').value,deadline:document.getElementById('df-deadline').value,status:document.getElementById('df-status').value,prioritas:document.getElementById('df-prioritas').value,catatan:document.getElementById('df-catatan').value}; if(_editId.dokumen){var idx=db.dokumen.findIndex(function(x){return x.id===_editId.dokumen;});if(idx>=0)db.dokumen[idx]=Object.assign({},db.dokumen[idx],data);}else db.dokumen.push(Object.assign({id:nextId('dok','D')},data)); _editId.dokumen=null;saveDB();closeModal('modal-dokumen');renderDokumen();toast('Dokumen disimpan!'); }
+function hapusDokumen(id){ if(!confirm('Hapus?'))return; db.dokumen=db.dokumen.filter(function(x){return x.id!==id;}); saveDB();renderDokumen(); }
 
 // ══════════════════════════════════════════════════════
 // VENDOR
@@ -1708,8 +1506,8 @@ function renderVendor(){
   if(vl) vl.innerHTML=d.length?d.map(function(v){ return '<div class="vendor-card"><div style="display:flex;align-items:flex-start;gap:12px"><div class="vendor-cat-icon" style="background:var(--blueDim)">'+(VENDOR_EMOJI[v.kat]||'✨')+'</div><div style="flex:1"><div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span style="font-size:14px;font-weight:700">'+v.nama+'</span><span class="badge '+(sClr[v.status]||'b-pending')+'">'+v.status+'</span></div><div style="font-size:11.5px;color:var(--text2);margin-bottom:6px">'+v.kat+(v.rating>0?' · <span style="color:#fbbf24">'+stars(v.rating)+'</span>':'')+'</div><div style="display:flex;gap:16px;font-size:12px"><span style="font-weight:700;color:var(--blue)">'+fmt(v.harga)+'</span>'+(v.kontak?'<span style="color:var(--text3)">📱 '+v.kontak+'</span>':'')+(v.alamat?'<span style="color:var(--text3)">📍 '+v.alamat+'</span>':'')+'</div>'+(v.catatan?'<div style="font-size:11px;color:var(--text3);font-style:italic;margin-top:4px">'+v.catatan+'</div>':'')+'</div><div style="display:flex;gap:5px;flex-shrink:0"><button class="tb-btn" style="height:26px;font-size:10.5px;padding:0 8px" onclick="editVendor(\''+v.id+'\')">Edit</button><button class="tb-btn" style="height:26px;font-size:10.5px;padding:0 8px;color:var(--red)" onclick="hapusVendor(\''+v.id+'\')">Hapus</button></div></div></div>'; }).join(''):'<div style="text-align:center;padding:3rem;color:var(--text3)">Tidak ada vendor</div>';
 }
 function editVendor(id){ var v=db.vendor.find(function(x){return x.id===id;}); if(!v)return; _editId.vendor=id; document.getElementById('modal-vendor-title').textContent='Edit Vendor'; ['vf-nama','vf-kat','vf-harga','vf-status','vf-kontak','vf-rating','vf-alamat','vf-catatan'].forEach(function(fid){var el=document.getElementById(fid);if(el)el.value=v[fid.replace('vf-','')]!=null?v[fid.replace('vf-','')]:'';}); openModal('modal-vendor'); }
-function saveVendor(){ var nama=document.getElementById('vf-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,kat:document.getElementById('vf-kat').value,harga:parseFloat(document.getElementById('vf-harga').value)||0,status:document.getElementById('vf-status').value,kontak:document.getElementById('vf-kontak').value,rating:parseInt(document.getElementById('vf-rating').value)||0,alamat:document.getElementById('vf-alamat').value,catatan:document.getElementById('vf-catatan').value}; var id; if(_editId.vendor){var idx=db.vendor.findIndex(function(x){return x.id===_editId.vendor;});if(idx>=0){db.vendor[idx]=Object.assign({},db.vendor[idx],data);id=_editId.vendor;}}else{id=nextId('vnd','V');db.vendor.push(Object.assign({id:id},data));saveMeta('counters',db.counters);} _editId.vendor=null;saveDoc('vendor',id,db.vendor.find(function(x){return x.id===id;}));closeModal('modal-vendor');renderVendor();toast('Vendor disimpan!'); }
-function hapusVendor(id){ if(!confirm('Hapus?'))return; db.vendor=db.vendor.filter(function(x){return x.id!==id;}); deleteFireDoc('vendor',id);renderVendor(); }
+function saveVendor(){ var nama=document.getElementById('vf-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,kat:document.getElementById('vf-kat').value,harga:parseFloat(document.getElementById('vf-harga').value)||0,status:document.getElementById('vf-status').value,kontak:document.getElementById('vf-kontak').value,rating:parseInt(document.getElementById('vf-rating').value)||0,alamat:document.getElementById('vf-alamat').value,catatan:document.getElementById('vf-catatan').value}; if(_editId.vendor){var idx=db.vendor.findIndex(function(x){return x.id===_editId.vendor;});if(idx>=0)db.vendor[idx]=Object.assign({},db.vendor[idx],data);}else db.vendor.push(Object.assign({id:nextId('vnd','V')},data)); _editId.vendor=null;saveDB();closeModal('modal-vendor');renderVendor();toast('Vendor disimpan!'); }
+function hapusVendor(id){ if(!confirm('Hapus?'))return; db.vendor=db.vendor.filter(function(x){return x.id!==id;}); saveDB();renderVendor(); }
 
 // ══════════════════════════════════════════════════════
 // TAMU
@@ -1732,8 +1530,8 @@ function renderTamu(){
   if(tbody) tbody.innerHTML=d.length?d.map(function(t){ return '<tr><td style="color:var(--text3)">'+(no++)+'</td><td><div style="font-weight:700">'+t.nama+'</div>'+(t.catatan?'<div style="font-size:11px;color:var(--text3)">'+t.catatan+'</div>':'')+'</td><td style="color:var(--text2)">'+t.kel+'</td><td style="text-align:center;font-weight:700">'+t.jml+'</td><td><span class="badge '+(bc[t.konfirm]||'b-pending')+'">'+t.konfirm+'</span></td><td style="color:var(--text3)">'+(t.kontak||'—')+'</td><td><span class="badge '+(t.undangan==='Sudah'?'b-done':'b-pending')+'">'+t.undangan+'</span></td><td><div style="display:flex;gap:5px"><button class="tb-btn" style="height:26px;font-size:10.5px;padding:0 8px" onclick="editTamu(\''+t.id+'\')">Edit</button><button class="tb-btn" style="height:26px;font-size:10.5px;padding:0 8px;color:var(--red)" onclick="hapusTamu(\''+t.id+'\')">Hapus</button></div></td></tr>'; }).join(''):'<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text3)">Tidak ada tamu</td></tr>';
 }
 function editTamu(id){ var t=db.tamu.find(function(x){return x.id===id;}); if(!t)return; _editId.tamu=id; document.getElementById('tf-nama').value=t.nama; document.getElementById('tf-kel').value=t.kel; document.getElementById('tf-jml').value=t.jml; document.getElementById('tf-konfirm').value=t.konfirm; document.getElementById('tf-kontak').value=t.kontak||''; document.getElementById('tf-undangan').value=t.undangan||'Belum'; document.getElementById('tf-catatan').value=t.catatan||''; openModal('modal-tamu'); }
-function saveTamu(){ var nama=document.getElementById('tf-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,kel:document.getElementById('tf-kel').value,jml:parseInt(document.getElementById('tf-jml').value)||1,konfirm:document.getElementById('tf-konfirm').value,kontak:document.getElementById('tf-kontak').value,undangan:document.getElementById('tf-undangan').value,catatan:document.getElementById('tf-catatan').value}; var id; if(_editId.tamu){var idx=db.tamu.findIndex(function(x){return x.id===_editId.tamu;});if(idx>=0){db.tamu[idx]=Object.assign({},db.tamu[idx],data);id=_editId.tamu;}}else{id=nextId('tamu','TM');db.tamu.push(Object.assign({id:id},data));saveMeta('counters',db.counters);} _editId.tamu=null;saveDoc('tamu',id,db.tamu.find(function(x){return x.id===id;}));closeModal('modal-tamu');renderTamu();toast('Tamu disimpan!'); }
-function hapusTamu(id){ if(!confirm('Hapus?'))return; db.tamu=db.tamu.filter(function(x){return x.id!==id;}); deleteFireDoc('tamu',id);renderTamu(); }
+function saveTamu(){ var nama=document.getElementById('tf-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,kel:document.getElementById('tf-kel').value,jml:parseInt(document.getElementById('tf-jml').value)||1,konfirm:document.getElementById('tf-konfirm').value,kontak:document.getElementById('tf-kontak').value,undangan:document.getElementById('tf-undangan').value,catatan:document.getElementById('tf-catatan').value}; if(_editId.tamu){var idx=db.tamu.findIndex(function(x){return x.id===_editId.tamu;});if(idx>=0)db.tamu[idx]=Object.assign({},db.tamu[idx],data);}else db.tamu.push(Object.assign({id:nextId('tamu','TM')},data)); _editId.tamu=null;saveDB();closeModal('modal-tamu');renderTamu();toast('Tamu disimpan!'); }
+function hapusTamu(id){ if(!confirm('Hapus?'))return; db.tamu=db.tamu.filter(function(x){return x.id!==id;}); saveDB();renderTamu(); }
 function importTamu(){ toast('Fitur import CSV segera hadir!','info'); }
 
 // ══════════════════════════════════════════════════════
@@ -1758,10 +1556,10 @@ function renderTimeline(){
   var tll=document.getElementById('tl-list');
   if(tll) tll.innerHTML=d.map(function(t){ var dl=daysLeft(t.deadline); var late2=t.deadline<today&&t.status!=='Selesai'; return '<div class="tl-item"><div class="tl-dot '+(t.status==='Selesai'?'done':late2?'late':'')+'"></div><div class="tl-box '+(t.status==='Selesai'?'done':'')+'" onclick="toggleTimeline(\''+t.id+'\')"><div class="tl-date">'+t.deadline+(late2?' <span style="color:var(--red);font-weight:700">· TERLAMBAT</span>':dl>=0&&t.status!=='Selesai'?' · '+dl+' hari lagi':'')+'</div><div style="display:flex;align-items:center;justify-content:space-between"><div class="tl-title">'+t.nama+'</div><div style="display:flex;gap:5px"><button onclick="event.stopPropagation();editTimeline(\''+t.id+'\')" class="tb-btn" style="height:22px;font-size:10px;padding:0 7px">Edit</button><button onclick="event.stopPropagation();hapusTimeline(\''+t.id+'\')" class="tb-btn" style="height:22px;font-size:10px;padding:0 7px;color:var(--red)">Hapus</button></div></div><div class="tl-desc">'+t.kat+' · <span class="badge '+(t.prioritas==='Tinggi'?'b-penting':t.prioritas==='Sedang'?'b-proses':'b-pending')+'">'+t.prioritas+'</span>'+(t.catatan?' · '+t.catatan:'')+'</div></div></div>'; }).join('');
 }
-function toggleTimeline(id){ var t=db.timeline.find(function(x){return x.id===id;}); if(!t)return; t.status=t.status==='Selesai'?'Belum':'Selesai'; saveDoc('timeline',id,t);renderTimeline();toast(t.status==='Selesai'?'Selesai! ✓':'Ditandai belum.','info'); }
+function toggleTimeline(id){ var t=db.timeline.find(function(x){return x.id===id;}); if(!t)return; t.status=t.status==='Selesai'?'Belum':'Selesai'; saveDB();renderTimeline();toast(t.status==='Selesai'?'Selesai! ✓':'Ditandai belum.','info'); }
 function editTimeline(id){ var t=db.timeline.find(function(x){return x.id===id;}); if(!t)return; _editId.timeline=id; document.getElementById('modal-tl-title').textContent='Edit Tugas'; document.getElementById('tlf-nama').value=t.nama; document.getElementById('tlf-deadline').value=t.deadline; document.getElementById('tlf-kat').value=t.kat; document.getElementById('tlf-prioritas').value=t.prioritas; document.getElementById('tlf-status').value=t.status; document.getElementById('tlf-catatan').value=t.catatan||''; openModal('modal-timeline'); }
-function saveTimeline(){ var nama=document.getElementById('tlf-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,deadline:document.getElementById('tlf-deadline').value,kat:document.getElementById('tlf-kat').value,prioritas:document.getElementById('tlf-prioritas').value,status:document.getElementById('tlf-status').value,catatan:document.getElementById('tlf-catatan').value}; var id; if(_editId.timeline){var idx=db.timeline.findIndex(function(x){return x.id===_editId.timeline;});if(idx>=0){db.timeline[idx]=Object.assign({},db.timeline[idx],data);id=_editId.timeline;}}else{id=nextId('tl','TL');db.timeline.push(Object.assign({id:id},data));saveMeta('counters',db.counters);} _editId.timeline=null;saveDoc('timeline',id,db.timeline.find(function(x){return x.id===id;}));closeModal('modal-timeline');renderTimeline();toast('Tugas disimpan!'); }
-function hapusTimeline(id){ if(!confirm('Hapus?'))return; db.timeline=db.timeline.filter(function(x){return x.id!==id;}); deleteFireDoc('timeline',id);renderTimeline(); }
+function saveTimeline(){ var nama=document.getElementById('tlf-nama').value.trim(); if(!nama){toast('Nama wajib!','err');return;} var data={nama:nama,deadline:document.getElementById('tlf-deadline').value,kat:document.getElementById('tlf-kat').value,prioritas:document.getElementById('tlf-prioritas').value,status:document.getElementById('tlf-status').value,catatan:document.getElementById('tlf-catatan').value}; if(_editId.timeline){var idx=db.timeline.findIndex(function(x){return x.id===_editId.timeline;});if(idx>=0)db.timeline[idx]=Object.assign({},db.timeline[idx],data);}else db.timeline.push(Object.assign({id:nextId('tl','TL')},data)); _editId.timeline=null;saveDB();closeModal('modal-timeline');renderTimeline();toast('Tugas disimpan!'); }
+function hapusTimeline(id){ if(!confirm('Hapus?'))return; db.timeline=db.timeline.filter(function(x){return x.id!==id;}); saveDB();renderTimeline(); }
 
 // ══════════════════════════════════════════════════════
 // LAPORAN
@@ -1836,16 +1634,16 @@ function renderPengaturan(){
     var sui=document.getElementById('set-user-info');
     if(sui) sui.innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:var(--r);border:1px solid var(--border)"><div class="user-av">'+currentUser.nama.slice(0,1).toUpperCase()+'</div><div><div style="font-weight:700">'+currentUser.nama+' <span class="badge-role badge-'+currentUser.role+'">'+currentUser.role+'</span></div><div style="font-size:11px;color:var(--text3)">'+currentUser.email+'</div><div style="font-size:11px;color:var(--green)">● Sesi Aktif</div></div></div>';
   }
-  renderCloudSetup();
+  renderFirebaseStatus();
   var storage=(JSON.stringify(db).length/1024).toFixed(1);
   var si=document.getElementById('set-sysinfo');
-  if(si) si.innerHTML='<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Versi</span><span>maNTapps Wedding v2 Firebase</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Status Cloud</span><span style="color:'+(_fs()&&_uid()?'var(--green)':'var(--amber)')+'">'+(_fs()&&_uid()?'🔥 Firebase Aktif':'⚡ Offline / Belum dikonfigurasi')+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Item Budget</span><span>'+db.budget.length+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Vendor</span><span>'+db.vendor.length+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Total Tamu</span><span>'+db.tamu.reduce(function(s,t){return s+t.jml;},0)+' orang</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Dokumen Selesai</span><span>'+db.dokumen.filter(function(d){return d.status==="Selesai";}).length+'/'+db.dokumen.length+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12px"><span style="color:var(--text2)">Storage</span><span>'+storage+' KB</span></div>'
-    +'<div style="margin-top:10px"><button onclick="refreshDariCloud()" style="width:100%;padding:9px;background:var(--blueDim);border:1.5px solid var(--blue4);border-radius:var(--r);color:var(--blue);font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer">☁ Refresh Data dari Firebase</button></div>';
-  renderCloudSetupPanel();
+  if(si) si.innerHTML='<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Versi</span><span>maNTapps Wedding v3.0 Firebase</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Item Budget</span><span>'+db.budget.length+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Vendor</span><span>'+db.vendor.length+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Total Tamu</span><span>'+db.tamu.reduce(function(s,t){return s+t.jml;},0)+' orang</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">Dokumen Selesai</span><span>'+db.dokumen.filter(function(d){return d.status==='Selesai';}).length+'/'+db.dokumen.length+'</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12px"><span style="color:var(--text2)">Storage Firebase</span><span>'+storage+' KB</span></div>';
 }
-function savePengaturan(){ db.setting.pria=document.getElementById('set-pria').value.trim(); db.setting.wanita=document.getElementById('set-wanita').value.trim(); db.setting.tglNikah=document.getElementById('set-tgl-nikah').value; db.setting.lokasi=document.getElementById('set-lokasi').value.trim(); db.setting.totalBudget=parseFloat(document.getElementById('set-total-budget').value)||0; saveMeta('setting',db.setting); toast('Profil pernikahan disimpan!'); renderPengaturan(); }
-function renderCloudSetup(){ var url=getScriptUrl(); var el=document.getElementById('cloud-url-input'); if(el) el.value=url; var st=document.getElementById('cloud-setup-status'); if(st) st.innerHTML=url?'<span style="color:var(--green)">☁️ Cloud aktif</span>':'<span style="color:var(--amber)">💾 Mode Lokal</span>'; }
-// simpanScriptUrl & hapusScriptUrl digantikan Firebase — tidak lagi digunakan
+function renderFirebaseStatus(){
+  var el = document.getElementById('firebase-status-txt');
+  if(el) el.textContent = fbRef ? 'Terhubung ke Firebase ☁️' : 'Tidak terhubung';
+}
+function savePengaturan(){ db.setting.pria=document.getElementById('set-pria').value.trim(); db.setting.wanita=document.getElementById('set-wanita').value.trim(); db.setting.tglNikah=document.getElementById('set-tgl-nikah').value; db.setting.lokasi=document.getElementById('set-lokasi').value.trim(); db.setting.totalBudget=parseFloat(document.getElementById('set-total-budget').value)||0; saveDB(); toast('Profil pernikahan disimpan!'); renderPengaturan(); }
 
 // ══════════════════════════════════════════════════════
 // EKSPOR & BACKUP
@@ -1866,145 +1664,41 @@ function exportXLSX(){
   toast('XLSX berhasil diunduh!');
 }
 function backupJSON(){ var blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='maNTapps_Wedding_backup_'+nowDate()+'.json'; a.click(); toast('Backup berhasil!'); }
-function importJSON(){ var inp=document.createElement('input'); inp.type='file'; inp.accept='.json'; inp.onchange=function(e){ var fr=new FileReader(); fr.onload=function(ev){ try{ db=JSON.parse(ev.target.result); cacheLocal(); if(_fs()&&_uid()) uploadDefaultToFirebase().then(function(){toast('Data diimport & diunggah ke cloud! ✓');}); else toast('Data diimport!'); renderDashboard(); }catch(e){ toast('File tidak valid!','err'); } }; fr.readAsText(e.target.files[0]); }; inp.click(); }
-function resetData(){ if(!confirm('Reset SEMUA data?'))return; if(!confirm('Konfirmasi: budget, dokumen, vendor, tamu, timeline akan dihapus?'))return; db=JSON.parse(JSON.stringify(DEFAULT_DB)); cacheLocal(); if(_fs()&&_uid()) uploadDefaultToFirebase().catch(function(){}); renderDashboard(); toast('Data direset.','info'); }
+function importJSON(){ var inp=document.createElement('input'); inp.type='file'; inp.accept='.json'; inp.onchange=function(e){ var fr=new FileReader(); fr.onload=function(ev){ try{ db=JSON.parse(ev.target.result); saveDB(); renderDashboard(); toast('Data diimport!'); }catch(e){ toast('File tidak valid!','err'); } }; fr.readAsText(e.target.files[0]); }; inp.click(); }
+function resetData(){ if(!confirm('Reset SEMUA data?'))return; if(!confirm('Konfirmasi: budget, dokumen, vendor, tamu, timeline akan dihapus?'))return; db=JSON.parse(JSON.stringify(DEFAULT_DB)); saveDB(); renderDashboard(); toast('Data direset.','info'); }
 
 // ══════════════════════════════════════════════════════
 // SINKRON CODE
 // ══════════════════════════════════════════════════════
 function buatKodeSinkron(){ if(!currentUser){toast('Login dulu!','err');return;} try{ var payload={v:1,email:currentUser.email,nama:currentUser.nama,ts:Date.now(),db:db}; var encoded=btoa(unescape(encodeURIComponent(JSON.stringify(payload)))); var el=document.getElementById('sync-code-output'); if(el) el.value=encoded; toast('Kode sinkron dibuat!'); }catch(e){toast('Gagal buat kode sinkron','err');} }
-function importKodeSinkron(){ var kode=(document.getElementById('sync-code-input').value||'').trim(); if(!kode){toast('Masukkan kode sinkron!','err');return;} try{ var payload=JSON.parse(decodeURIComponent(escape(atob(kode)))); if(!payload.db||!payload.email){toast('Kode tidak valid!','err');return;} if(currentUser&&payload.email.toLowerCase()!==currentUser.email.toLowerCase()){ if(!confirm('Data ini milik akun '+payload.email+'. Import ke akun Anda?'))return; } db=payload.db; cacheLocal(); if(_fs()&&_uid()) uploadDefaultToFirebase().then(function(){toast('Data sinkron diunggah ke cloud ✓');}); closeModal('modal-sinkron'); renderDashboard(); toast('Data berhasil diimport! ✓'); }catch(e){toast('Kode sinkron tidak valid!','err');} }
+function importKodeSinkron(){ var kode=(document.getElementById('sync-code-input').value||'').trim(); if(!kode){toast('Masukkan kode sinkron!','err');return;} try{ var payload=JSON.parse(decodeURIComponent(escape(atob(kode)))); if(!payload.db||!payload.email){toast('Kode tidak valid!','err');return;} if(currentUser&&payload.email.toLowerCase()!==currentUser.email.toLowerCase()){ if(!confirm('Data ini milik akun '+payload.email+'. Import ke akun Anda?'))return; } db=payload.db; saveDB(); closeModal('modal-sinkron'); renderDashboard(); toast('Data berhasil diimport! ✓'); }catch(e){toast('Kode sinkron tidak valid!','err');} }
 function salinKodeSinkron(){ var el=document.getElementById('sync-code-output'); if(!el)return; el.select(); document.execCommand('copy'); toast('Kode sinkron disalin!'); }
 function switchSyncTab(tab){ var expSec=document.getElementById('sync-code-section'); var impSec=document.getElementById('sync-import-section'); var tabExp=document.getElementById('tab-export'); var tabImp=document.getElementById('tab-import'); if(expSec) expSec.style.display=tab==='export'?'block':'none'; if(impSec) impSec.style.display=tab==='import'?'block':'none'; if(tabExp) tabExp.classList.toggle('active',tab==='export'); if(tabImp) tabImp.classList.toggle('active',tab==='import'); if(tab==='export') buatKodeSinkron(); else{var inp=document.getElementById('sync-code-input');if(inp)inp.value='';} }
 
 // ══════════════════════════════════════════════════════
 // PANDUAN APPS SCRIPT
 // ══════════════════════════════════════════════════════
-function salinAppsScript(){ var el=document.getElementById('apps-script-code'); if(!el)return; el.select(); document.execCommand('copy'); toast('Kode Apps Script disalin!'); }
-
 // ══════════════════════════════════════════════════════
 // CLOCK & STARTUP
 // ══════════════════════════════════════════════════════
 function tickDate(){ var el=document.getElementById('tb-date'); if(el) el.textContent=new Date().toLocaleString('id-ID',{weekday:'short',day:'2-digit',month:'short',year:'numeric'}); }
 
-window.addEventListener('load', async function(){
+window.addEventListener('load', function(){
   tickDate(); setInterval(tickDate, 60000);
-
-  // Keyboard shortcuts
-  var lpw=document.getElementById('login-pw');
-  if(lpw) lpw.addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
-  var le=document.getElementById('login-email');
-  if(le) le.addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('login-pw').focus();});
-
-  // Load akun dari cache lokal
-  loadAuth_local();
-
-  // ── Callback: Firebase Auth state sudah siap & user masih login ──
-  window._onFbAuthReady = async function(fbUser) {
-    var raw = sessionStorage.getItem(AUTH_SESSION);
-    if (!raw) return;
-    try {
-      var sess = JSON.parse(raw);
-      if (!sess || !sess.email || (Date.now() - sess.ts) >= 86400000) return;
-      if (sess.email.toLowerCase() !== fbUser.email.toLowerCase()) return;
-      // Susun currentUser dari session + akun lokal
-      var accLokal = authAccounts.find(function(a){ return a.email.toLowerCase() === sess.email.toLowerCase(); });
-      currentUser = {
-        id:    fbUser.uid,
-        email: fbUser.email,
-        nama:  sess.nama || (accLokal ? accLokal.nama : fbUser.displayName || 'Pengguna'),
-        role:  accLokal ? accLokal.role : 'user',
-      };
-      document.getElementById('login-screen').style.display='none';
-      document.getElementById('app-shell').style.display='grid';
-      showLoading(true,'Memuat data dari cloud…');
-      await loadDBFromFirebase();
-      showLoading(false);
-      updateSidebarUser();
-      renderDashboard();
-      var lp=sessionStorage.getItem(AUTH_LASTPAGE);
-      if(lp&&lp!=='dashboard'){var btn=document.querySelector('[data-page="'+lp+'"]');if(btn)goPage(lp,btn);}
-    } catch(e) { sessionStorage.removeItem(AUTH_SESSION); }
-  };
-
-  // ── Fallback: sesi lokal (Firebase belum dikonfigurasi / offline) ──
-  var raw = sessionStorage.getItem(AUTH_SESSION);
-  if (raw) {
-    try {
-      var sess = JSON.parse(raw);
-      if (sess && sess.email && (Date.now()-sess.ts) < 86400000) {
-        // Tunggu sebentar kalau Firebase sedang inisialisasi
-        await new Promise(function(resolve){ setTimeout(resolve, 1200); });
-        if (window._fbUser) return; // Firebase sudah handle via _onFbAuthReady
-        var acc = authAccounts.find(function(a){ return a.email.toLowerCase()===sess.email.toLowerCase(); });
-        if (acc) {
-          currentUser = acc;
-          document.getElementById('login-screen').style.display='none';
-          document.getElementById('app-shell').style.display='grid';
-          showLoading(true,'Memuat data…');
-          loadCacheLocal();
-          showLoading(false);
-          updateSidebarUser();
-          setSyncStatus('local');
-          renderDashboard();
-          var lp=sessionStorage.getItem(AUTH_LASTPAGE);
-          if(lp&&lp!=='dashboard'){var btn=document.querySelector('[data-page="'+lp+'"]');if(btn)goPage(lp,btn);}
-          return;
-        }
-      }
-    } catch(e) { sessionStorage.removeItem(AUTH_SESSION); }
-  }
-  renderAuthList();
-});
-
-document.addEventListener('keydown',function(e){
-  if(e.key==='Escape')
-    document.querySelectorAll('.modal-overlay.open').forEach(function(m){m.classList.remove('open');});
-});
-
-// ══════════════════════════════════════════════════════
-// FIREBASE CLOUD STATUS — render status di Pengaturan
-// ══════════════════════════════════════════════════════
-function renderCloudSetupPanel(){
-  const st  = document.getElementById('cloud-conn-status');
-  const inp = document.getElementById('cloud-url-input');
-  const isConn = _fs() && _uid();
-  if(inp) inp.value = isConn ? '🔥 Firebase Firestore aktif' : '(belum terhubung)';
-  if(st)  st.innerHTML = isConn
-    ? '<span style="color:var(--green)">🔥 Terhubung ke Firebase Firestore</span>'
-    : '<span style="color:var(--amber)">💾 Mode Offline — isi FIREBASE_CONFIG di kode</span>';
-}
-
-// Fungsi stub (tidak lagi dipakai — digantikan Firebase)
-function simpanCloudUrl(){ toast('Konfigurasi sekarang via FIREBASE_CONFIG di file HTML.','info'); }
-function hapusCloudUrl(){ toast('Hapus konfigurasi via Firebase Console.','info'); }
-function renderSwCloudStatus(){ renderCloudSetupPanel(); }
-function simpanSwCloudUrl(){ simpanCloudUrl(); }
-function hapusSwCloudUrl(){ hapusCloudUrl(); }
-
-// Tambah tombol Refresh dari Cloud di Pengaturan
-function refreshDariCloud(){
-  if(!_fs()||!_uid()){ toast('Firebase tidak tersedia.','err'); return; }
-  if(!confirm('Muat ulang semua data dari Firebase Cloud?')) return;
-  showLoading(true,'Memuat dari cloud…');
-  loadDBFromFirebase().then(function(){
-    showLoading(false);
-    renderDashboard();
-    var lp=sessionStorage.getItem(AUTH_LASTPAGE);
-    var renders={budget:renderBudget,dokumen:renderDokumen,vendor:renderVendor,tamu:renderTamu,timeline:renderTimeline,laporan:renderLaporan,pengaturan:renderPengaturan};
-    if(lp&&renders[lp]) renders[lp]();
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape')
+      document.querySelectorAll('.modal-overlay.open').forEach(function(m){m.classList.remove('open');});
   });
-}
+});
 
 function switchSyncTab(tab){
-  ['export','import','cloud'].forEach(function(t){
+  ['export','import'].forEach(function(t){
     const sec = document.getElementById('stab-'+t+'-sec');
     const btn = document.getElementById('stab-'+t);
     if(sec) sec.style.display = (t===tab) ? 'block' : 'none';
     if(btn) btn.classList.toggle('active', t===tab);
   });
   if(tab==='export') buatKodeSinkron();
-  if(tab==='cloud')  renderSwCloudStatus();
   if(tab==='import'){
     const inp = document.getElementById('sw-kode-input');
     if(inp) inp.value = '';
@@ -2012,7 +1706,7 @@ function switchSyncTab(tab){
 }
 
 function openModalSync(){
-  openModal('modal-cloud-sync');
+  openModal('modal-sinkron');
   switchSyncTab('export');
 }
 
@@ -2037,9 +1731,8 @@ function importKodeSinkron(){
       if(!confirm('Kode ini dari aplikasi '+payload.app+'. Tetap import ke Wedding?')) return;
     }
     db = payload.db;
-    cacheLocal();
-    if(_fs()&&_uid()) uploadDefaultToFirebase().then(function(){toast('Data cloud diunggah ✓');});
-    closeModal('modal-cloud-sync');
+    saveDB();
+    closeModal('modal-sinkron');
     renderDashboard();
     toast('Data berhasil diimport dari kode sinkron ✓');
   }catch(e){ toast('Kode tidak valid atau rusak!','err'); console.error(e); }
@@ -2052,16 +1745,101 @@ function salinKodeSinkron(){
   toast('Kode sinkron disalin!');
 }
 
-function salinSwScript(){
-  const el = document.getElementById('sw-apps-script');
-  if(!el) return;
-  el.select(); document.execCommand('copy');
-  toast('Kode Apps Script disalin!');
+// ══════════════════════════════════════════════════════
+// FIREBASE INIT
+// ══════════════════════════════════════════════════════
+function initFirebase(){
+  fbApp = firebase.initializeApp(FIREBASE_CONFIG);
+  fbDB  = firebase.database();
+  fbRef = fbDB.ref('wedding');
+  fbAccRef = fbDB.ref('wedding_accounts');
+
+  // Loading screen
+  const loadDiv = document.createElement('div');
+  loadDiv.id = 'fb-loading';
+  loadDiv.style.cssText = 'position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px';
+  loadDiv.innerHTML = `
+    <div style="width:56px;height:56px;background:linear-gradient(135deg,var(--blue) 0%,var(--sky) 100%);border-radius:18px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(37,99,235,.35)">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+    </div>
+    <div style="font-family:var(--serif);font-size:22px;font-weight:600;color:var(--text)">maNTapps <span style="color:var(--blue)">Wedding</span></div>
+    <div style="font-size:12.5px;color:var(--text3)" id="fb-load-msg">Menghubungkan ke Firebase…</div>`;
+  document.body.appendChild(loadDiv);
+
+  Promise.all([
+    fbAccRef.once('value')
+  ]).then(async ([snapAcc]) => {
+    // Load akun
+    const accData = snapAcc.val();
+    if(accData && Array.isArray(accData) && accData.length > 0){
+      authAccounts = accData;
+    } else {
+      authAccounts = [{id:'USR001',nama:'Admin',email:'admin@wedding.com',pw:'1234',role:'owner',kode:'WEDDING2024',tgl:nowDate(),lastLogin:null}];
+      fbAccRef.set(authAccounts);
+    }
+
+    document.getElementById('fb-loading').remove();
+    onFirebaseReady();
+
+  }).catch(e => {
+    console.error('Firebase init error:', e);
+    const msg = document.getElementById('fb-load-msg');
+    if(msg) msg.textContent = 'Gagal konek — cek koneksi internet';
+    setTimeout(() => {
+      document.getElementById('fb-loading').remove();
+      toast('Gagal konek Firebase','err');
+      onFirebaseReady();
+    }, 2000);
+  });
 }
+
+function onFirebaseReady(){
+  renderAuthList();
+  const raw = sessionStorage.getItem(AUTH_SESSION);
+  if(raw){
+    try{
+      const sess = JSON.parse(raw);
+      if(sess && sess.email && (Date.now() - sess.ts) < 86400000){
+        const acc = authAccounts.find(a => a.email.toLowerCase() === sess.email.toLowerCase());
+        if(acc){
+          currentUser = acc;
+          document.getElementById('login-screen').style.display = 'none';
+          document.getElementById('app-shell').style.display = 'grid';
+          showLoading(true,'Memuat data dari Firebase…');
+          loadDBForUser(acc.email).then(() => {
+            showLoading(false);
+            updateSidebarUser();
+            renderDashboard();
+            const lp = sessionStorage.getItem(AUTH_LASTPAGE);
+            if(lp && lp !== 'dashboard'){
+              const btn = document.querySelector('[data-page="'+lp+'"]');
+              if(btn) goPage(lp, btn);
+            }
+            toast('Halo kembali, ' + acc.nama + '! 👋');
+          });
+          return;
+        } else {
+          sessionStorage.removeItem(AUTH_SESSION);
+          toast('Sesi tidak valid, silakan login ulang.','err');
+        }
+      }
+    }catch(e){ sessionStorage.removeItem(AUTH_SESSION); }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const lpw = document.getElementById('login-pw');
+  if(lpw) lpw.addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+  const lem = document.getElementById('login-email');
+  if(lem) lem.addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('login-pw').focus(); });
+});
 
 </script>
 
-
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>initFirebase();</script>
 
 <!-- Modal Sinkronisasi Data -->
 <div class="modal-overlay" id="modal-sinkron">
@@ -2070,231 +1848,33 @@ function salinSwScript(){
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
     Sinkronisasi Data Antar Device
   </div>
-
-  <div style="background:var(--blueDim);border:1px solid var(--blue4);border-radius:var(--r);padding:12px 14px;margin-bottom:18px;font-size:12.5px;color:var(--blue2);line-height:1.6">
-    <strong>Cara kerja:</strong> Buat Kode Sinkron di device lama → Salin kode → Buka aplikasi di device baru → Login → Import Kode Sinkron. Data Anda akan langsung tersedia.
+  <div style="background:var(--blueDim);border:1px solid var(--blue4);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--blue2);line-height:1.6">
+    Data tersimpan otomatis di <strong>Firebase</strong>. Fitur ini untuk transfer manual antar akun berbeda.
   </div>
-
   <div class="pill-tabs" style="margin-bottom:18px">
-    <button class="pill-tab active" id="tab-export" onclick="switchSyncTab('export')">📤 Buat Kode (Device Ini)</button>
-    <button class="pill-tab" id="tab-import" onclick="switchSyncTab('import')">📥 Import Kode (Device Baru)</button>
+    <button class="pill-tab active" id="stab-export" onclick="switchSyncTab('export')">📤 Buat Kode (Device Ini)</button>
+    <button class="pill-tab" id="stab-import" onclick="switchSyncTab('import')">📥 Import Kode (Device Lain)</button>
   </div>
-
-  <div id="sync-code-section">
+  <div id="stab-export-sec">
     <div class="form-group" style="margin-bottom:10px">
       <label>Kode Sinkron Data Anda</label>
-      <textarea id="sync-code-output" readonly style="width:100%;height:120px;background:var(--bg);border:1.5px solid var(--border2);border-radius:var(--r);color:var(--text2);font-family:monospace;font-size:10px;padding:10px;outline:none;resize:none;word-break:break-all"></textarea>
+      <textarea id="sw-kode-output" readonly style="width:100%;height:120px;background:var(--bg);border:1.5px solid var(--border2);border-radius:var(--r);color:var(--text2);font-family:monospace;font-size:10px;padding:10px;outline:none;resize:none;word-break:break-all"></textarea>
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn-blue" style="flex:1;height:40px;font-size:13px" onclick="buatKodeSinkron()">🔄 Buat / Perbarui Kode</button>
-      <button class="tb-btn" style="height:40px;padding:0 18px" onclick="salinKodeSinkron()">📋 Salin Kode</button>
+      <button class="tb-btn" style="height:40px;padding:0 18px" onclick="salinKodeSinkron()">📋 Salin</button>
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:10px;text-align:center">Kode berisi semua data Anda (budget, tamu, vendor, dll). Simpan dengan aman.</div>
   </div>
-
-  <div id="sync-import-section" style="display:none">
+  <div id="stab-import-sec" style="display:none">
     <div class="form-group">
       <label>Tempel Kode Sinkron di Sini</label>
-      <textarea id="sync-code-input" placeholder="Tempel kode sinkron dari device lain..." style="width:100%;height:120px;background:var(--bg);border:1.5px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:monospace;font-size:10px;padding:10px;outline:none;resize:none;word-break:break-all"></textarea>
+      <textarea id="sw-kode-input" placeholder="Tempel kode sinkron dari device lain..." style="width:100%;height:120px;background:var(--bg);border:1.5px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:monospace;font-size:10px;padding:10px;outline:none;resize:none;word-break:break-all"></textarea>
     </div>
     <button class="btn-blue" style="width:100%;height:42px;font-size:13px" onclick="importKodeSinkron()">✅ Import & Terapkan Data</button>
-    <div style="font-size:11px;color:var(--red);margin-top:8px;text-align:center">⚠️ Data yang ada akan digantikan dengan data dari kode.</div>
+    <div style="font-size:11px;color:var(--red);margin-top:8px;text-align:center">⚠️ Data yang ada akan digantikan. Firebase tetap diupdate.</div>
   </div>
-
   <div class="modal-actions" style="border-top:none;padding-top:8px">
     <button class="btn-cancel" onclick="closeModal('modal-sinkron')">Tutup</button>
-  </div>
-</div>
-</div>
-
-
-<!-- Modal Kode Apps Script -->
-<div class="modal-overlay" id="modal-apps-script">
-<div class="modal-box" style="width:600px">
-  <div class="modal-title">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 10l4 4 4-4"/></svg>
-    Kode Google Apps Script
-  </div>
-  <div style="background:var(--blueDim);border:1px solid var(--blue4);border-radius:var(--r);padding:10px 14px;font-size:12px;color:var(--blue2);margin-bottom:14px;line-height:1.6">
-    <strong>Langkah:</strong> Salin kode di bawah → Tempel di Google Apps Script → Deploy sebagai Web App → Salin URL-nya → Tempel di Pengaturan aplikasi ini.
-  </div>
-  <div style="position:relative">
-    <textarea id="apps-script-code" readonly style="width:100%;height:320px;background:#1e293b;color:#94a3b8;font-family:monospace;font-size:11px;padding:14px;border:1px solid var(--border2);border-radius:var(--r);outline:none;resize:none;line-height:1.6"></textarea>
-    <button onclick="salinAppsScript()" style="position:absolute;top:8px;right:8px;padding:5px 12px;background:var(--blue);color:#fff;border:none;border-radius:var(--r);font-size:11px;font-weight:700;cursor:pointer">📋 Salin</button>
-  </div>
-  <div class="modal-actions">
-    <button class="btn-cancel" onclick="closeModal('modal-apps-script')">Tutup</button>
-    <a href="https://script.google.com/home/start" target="_blank"><button class="btn-blue" type="button">Buka Google Apps Script →</button></a>
-  </div>
-</div>
-</div>
-
-
-<!-- Modal Panduan Setup Google Sheets -->
-<div class="modal-overlay" id="modal-panduan-cloud">
-<div class="modal-box" style="width:600px;max-height:88vh">
-  <div class="modal-title">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-    Panduan Setup Google Sheets
-  </div>
-
-  <div style="background:var(--blueDim);border:1px solid var(--blue4);border-radius:var(--r);padding:12px 14px;margin-bottom:18px;font-size:12.5px;color:var(--blue2)">
-    Setelah setup selesai, semua data Wedding Anda tersimpan di Google Sheets Anda sendiri — aman, gratis, dan bisa diakses dari HP maupun laptop.
-  </div>
-
-  <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">Langkah 1 — Buat Google Spreadsheet</div>
-  <div style="font-size:12.5px;color:var(--text2);margin-bottom:14px;line-height:1.7">
-    Buka <a href="https://sheets.google.com" target="_blank" style="color:var(--blue)">sheets.google.com</a> → klik <strong>+ Spreadsheet kosong</strong> → beri nama misalnya <em>"maNTapps Wedding DB"</em>.
-  </div>
-
-  <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">Langkah 2 — Buat Apps Script</div>
-  <div style="font-size:12.5px;color:var(--text2);margin-bottom:8px;line-height:1.7">
-    Di Spreadsheet → klik menu <strong>Ekstensi → Apps Script</strong> → hapus semua kode → paste kode di bawah ini:
-  </div>
-  <div style="position:relative">
-    <textarea id="apps-script-code" readonly style="width:100%;height:220px;background:#0f172a;color:#e2e8f0;font-family:monospace;font-size:11px;padding:12px;border-radius:var(--r);border:1px solid var(--border2);outline:none;resize:none;line-height:1.6"></textarea>
-    <button onclick="salinAppsScript()" style="position:absolute;top:8px;right:8px;background:var(--blue);border:none;color:#fff;border-radius:var(--r);padding:4px 10px;font-size:11px;font-family:var(--sans);cursor:pointer;font-weight:600">Salin Kode</button>
-  </div>
-
-  <div style="font-size:13px;font-weight:700;color:var(--text);margin:14px 0 8px">Langkah 3 — Deploy sebagai Web App</div>
-  <div style="font-size:12.5px;color:var(--text2);line-height:1.7">
-    Di Apps Script → klik <strong>Deploy → New deployment</strong> → pilih tipe <strong>Web App</strong><br>
-    → <strong>Execute as: Me</strong> → <strong>Who has access: Anyone</strong><br>
-    → klik <strong>Deploy</strong> → salin URL yang muncul.
-  </div>
-
-  <div style="font-size:13px;font-weight:700;color:var(--text);margin:14px 0 8px">Langkah 4 — Hubungkan ke Aplikasi</div>
-  <div style="font-size:12.5px;color:var(--text2);line-height:1.7">
-    Kembali ke <strong>maNTapps Wedding → Pengaturan → Koneksi Google Sheets</strong><br>
-    → paste URL di kolom yang tersedia → klik <strong>"Hubungkan & Test"</strong> → selesai! ✓
-  </div>
-
-  <div class="modal-actions">
-    <button class="btn-cancel" onclick="closeModal('modal-panduan-cloud')">Tutup</button>
-    <button class="btn-blue" onclick="salinAppsScript()">Salin Kode Apps Script</button>
-  </div>
-</div>
-</div>
-
-
-<!-- ══ MODAL SINKRONISASI ══ -->
-<style>
-.sync-ov{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:600;align-items:center;justify-content:center;backdrop-filter:blur(8px);}
-.sync-ov.open{display:flex;}
-.sync-box{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r3);padding:26px;width:540px;max-width:96vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(15,23,42,.25);animation:slideUp .25s ease;}
-.sync-tabs-row{display:flex;gap:4px;margin-bottom:18px;background:var(--bg2);border-radius:10px;padding:4px;}
-.sync-tab{flex:1;height:34px;border:none;background:none;color:var(--text3);font-size:12px;font-weight:700;border-radius:8px;cursor:pointer;font-family:var(--sans);transition:all .2s;}
-.sync-tab.active{background:var(--bg1);color:var(--blue);box-shadow:0 1px 4px rgba(37,99,235,.15);}
-.sync-tab:hover:not(.active){color:var(--text);}
-.sync-info{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:11px 14px;font-size:12px;color:var(--text2);line-height:1.65;margin-bottom:14px;}
-.sync-lbl{font-size:10.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px;display:block;}
-.sync-code{width:100%;height:110px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:var(--r);color:var(--text2);font-family:monospace;font-size:10px;padding:10px;outline:none;resize:none;word-break:break-all;line-height:1.5;transition:border .2s;}
-.sync-code:focus{border-color:var(--blue3);}
-.sync-script{width:100%;height:180px;background:#0f172a;border:1.5px solid var(--border);border-radius:var(--r);color:#e2e8f0;font-family:monospace;font-size:9.5px;padding:12px;outline:none;resize:none;line-height:1.6;}
-.sync-btn-row{display:flex;gap:8px;margin-bottom:8px;}
-.sync-primary{flex:1;height:40px;border:none;background:linear-gradient(135deg,var(--blue) 0%,var(--sky) 100%);color:#fff;font-weight:700;font-size:13px;border-radius:var(--r2);cursor:pointer;font-family:var(--sans);transition:all .2s;}
-.sync-primary:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(37,99,235,.35);}
-.sync-sec{height:40px;padding:0 16px;border:1.5px solid var(--border2);background:none;color:var(--text2);font-size:12.5px;font-weight:600;border-radius:var(--r2);cursor:pointer;font-family:var(--sans);transition:all .15s;}
-.sync-sec:hover{background:var(--bg2);color:var(--text);}
-.sync-step{display:flex;gap:10px;margin-bottom:10px;font-size:12px;color:var(--text2);line-height:1.6;}
-.sync-num{width:22px;height:22px;border-radius:50%;background:var(--blue);color:#fff;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
-.sync-warn{font-size:11px;color:var(--amber);margin-top:8px;text-align:center;}
-</style>
-
-<div class="sync-ov" id="modal-cloud-sync">
-<div class="sync-box">
-  <div style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--text);margin-bottom:18px;display:flex;align-items:center;gap:10px">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-    Sinkronisasi — maNTapps Wedding
-  </div>
-
-  <div class="sync-tabs-row">
-    <button class="sync-tab active" id="stab-export" onclick="switchSyncTab('export')">📤 Buat Kode</button>
-    <button class="sync-tab" id="stab-import" onclick="switchSyncTab('import')">📥 Import Kode</button>
-    <button class="sync-tab" id="stab-cloud" onclick="switchSyncTab('cloud')">☁️ Google Sheets</button>
-  </div>
-
-  <!-- EXPORT -->
-  <div id="stab-export-sec">
-    <div class="sync-info">Salin kode ini → buka aplikasi di device lain → Login → klik Sinkron → Import Kode. Data langsung tersedia.</div>
-    <label class="sync-lbl">Kode Sinkron Data Anda</label>
-    <textarea class="sync-code" id="sw-kode-output" readonly placeholder="Klik Buat Kode…"></textarea>
-    <div class="sync-btn-row">
-      <button class="sync-primary" onclick="buatKodeSinkron()">🔄 Buat / Perbarui Kode</button>
-      <button class="sync-sec" onclick="salinKodeSinkron()">📋 Salin</button>
-    </div>
-    <div style="font-size:11px;color:var(--text3);text-align:center">Kode berisi seluruh data pernikahan Anda</div>
-  </div>
-
-  <!-- IMPORT -->
-  <div id="stab-import-sec" style="display:none">
-    <div class="sync-info">Tempel kode dari device lain. Semua data di device ini akan digantikan.</div>
-    <label class="sync-lbl">Tempel Kode Sinkron</label>
-    <textarea class="sync-code" id="sw-kode-input" placeholder="Tempel kode sinkron di sini…"></textarea>
-    <button class="sync-primary" style="width:100%" onclick="importKodeSinkron()">✅ Import &amp; Terapkan</button>
-    <div class="sync-warn">⚠️ Data yang ada akan digantikan dengan data dari kode</div>
-  </div>
-
-  <!-- CLOUD -->
-  <div id="stab-cloud-sec" style="display:none">
-    <div class="sync-info">Hubungkan ke Google Sheets — data sync otomatis ke cloud setiap kali disimpan. Bisa diakses dari device manapun tanpa perlu Kode Sinkron.</div>
-    <div id="sw-conn-status" style="font-size:12.5px;margin-bottom:10px;min-height:20px;font-weight:600"></div>
-    <label class="sync-lbl">URL Google Apps Script</label>
-    <input type="url" id="sw-cloud-url" class="sync-code" style="height:38px;word-break:normal" placeholder="https://script.google.com/macros/s/…/exec">
-    <div class="sync-btn-row" style="margin-top:8px">
-      <button class="sync-primary" onclick="simpanSwCloudUrl()">🔗 Hubungkan &amp; Test</button>
-      <button class="sync-sec" onclick="hapusSwCloudUrl()">Hapus</button>
-    </div>
-
-    <div style="font-size:13px;font-weight:700;color:var(--text);margin:16px 0 10px">Cara Setup (5 menit)</div>
-    <div class="sync-step"><div class="sync-num">1</div><div>Buka <a href="https://sheets.google.com" target="_blank" style="color:var(--blue);font-weight:600">sheets.google.com</a> → buat Spreadsheet kosong baru → beri nama bebas</div></div>
-    <div class="sync-step"><div class="sync-num">2</div><div>Di spreadsheet: klik menu <strong style="color:var(--text)">Ekstensi → Apps Script</strong> → hapus semua kode yang ada → paste kode di bawah ini</div></div>
-    <div class="sync-step"><div class="sync-num">3</div><div>Klik <strong style="color:var(--text)">Deploy → New deployment → Web App</strong><br>Execute as: <em>Me</em> &nbsp;·&nbsp; Who has access: <em>Anyone</em> → Deploy → salin URL</div></div>
-    <div class="sync-step"><div class="sync-num">4</div><div>Tempel URL di kolom atas → klik <strong style="color:var(--text)">Hubungkan &amp; Test</strong> → selesai ✓</div></div>
-
-    <label class="sync-lbl" style="margin-top:12px">Kode Google Apps Script</label>
-    <div style="position:relative">
-      <textarea class="sync-script" id="sw-apps-script" readonly>const SS_ID = SpreadsheetApp.getActiveSpreadsheet().getId();
-const SHEET_NAME = &#x27;maNTapps_DB&#x27;;
-
-function getSheet(){
-  var ss=SpreadsheetApp.openById(SS_ID);
-  var sh=ss.getSheetByName(SHEET_NAME);
-  if(!sh){sh=ss.insertSheet(SHEET_NAME);sh.appendRow([&#x27;key&#x27;,&#x27;value&#x27;,&#x27;updated_at&#x27;]);sh.getRange(1,1,1,3).setFontWeight(&#x27;bold&#x27;);}
-  return sh;
-}
-function doGet(e){
-  var action=e.parameter.action, key=e.parameter.key;
-  if(action===&#x27;ping&#x27;) return resp({ok:true,msg:&#x27;maNTapps Wedding OK&#x27;});
-  if(action===&#x27;get&#x27;&amp;&amp;key){
-    var d=getSheet().getDataRange().getValues();
-    for(var i=1;i&lt;d.length;i++) if(d[i][0]===key) return resp({ok:true,value:d[i][1]});
-    return resp({ok:true,value:null});
-  }
-  return resp({ok:false,msg:&#x27;Unknown action&#x27;});
-}
-function doPost(e){
-  try{
-    var b=JSON.parse(e.postData.contents);
-    if(b.action===&#x27;set&#x27;&amp;&amp;b.key!==undefined&amp;&amp;b.value!==undefined){
-      var sh=getSheet(),d=sh.getDataRange().getValues(),now=new Date().toLocaleString(&#x27;id-ID&#x27;);
-      for(var i=1;i&lt;d.length;i++){
-        if(d[i][0]===b.key){sh.getRange(i+1,2).setValue(b.value);sh.getRange(i+1,3).setValue(now);return resp({ok:true});}
-      }
-      sh.appendRow([b.key,b.value,now]);return resp({ok:true});
-    }
-    return resp({ok:false,msg:&#x27;Bad request&#x27;});
-  }catch(err){return resp({ok:false,msg:err.message});}
-}
-function resp(obj){
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
-}</textarea>
-      <button onclick="salinSwScript()" style="position:absolute;top:8px;right:8px;background:var(--blue);border:none;color:#fff;border-radius:var(--r);padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--sans)">Salin Kode</button>
-    </div>
-  </div>
-
-  <div style="display:flex;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
-    <button class="sync-sec" onclick="closeModal('modal-cloud-sync')">Tutup</button>
   </div>
 </div>
 </div>
