@@ -323,83 +323,91 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13
 .badge-admin{background:var(--greenDim);color:var(--green);}
 .badge-user{background:var(--bg3);color:var(--text3);}
 
-  /* ── PENYESUAIAN MOBILE & RESPONSIF (PORTRAIT & LANDSCAPE) ── */
+ /* ── PENYESUAIAN MOBILE & RESPONSIF (maNTapps Wedding) ── */
 
 @media (max-width: 900px) {
-  /* Ubah layout utama menjadi satu kolom di HP */
-  .body { 
-    grid-template-columns: 1fr; 
-    grid-template-rows: 1fr auto; /* Cart pindah ke bawah atau sembunyi */
-    overflow-y: auto;
+  /* Sembunyikan sidebar asli, ganti layout ke satu kolom */
+  .shell {
+    grid-template-columns: 1fr;
   }
 
-  /* Panel kanan (Cart) menyesuaikan lebar layar */
-  .right-panel {
-    border-left: none;
-    border-top: 1px solid var(--border);
-    max-height: 60vh; /* Batasi tinggi cart di mobile agar tidak menutupi produk */
+  .sidebar {
+    display: none; /* Idealnya buatkan menu hamburger nantinya */
   }
 
-  /* Grid produk menyesuaikan layar kecil */
-  .products-grid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    padding: 10px;
-    height: auto;
+  .main-area {
+    grid-template-rows: auto 1fr;
   }
 
-  .stats-row {
-    grid-template-columns: 1fr 1fr; /* Statistik jadi 2 kolom */
+  .topbar {
+    padding: 0 16px;
+    height: 56px;
+  }
+
+  .tb-title {
+    font-size: 18px;
+  }
+
+  .content {
+    padding: 16px;
+  }
+
+  /* Statistik menjadi 2 kolom agar tidak berdesakan */
+  .stats-grid, .stats-grid.g3, .stats-grid.g5 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  /* Grid layout (g2, g3c, g65) dipaksa menjadi satu kolom */
+  .g2, .g3c, .g65, .g56, .form-row, .form-row3 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Penyesuaian ukuran teks untuk mobile */
+  .stat-val {
+    font-size: 20px;
+  }
+
+  .card {
+    padding: 16px;
   }
 }
 
-/* KHUSUS MODE LANDSCAPE PADA HP (Layar Pendek & Lebar) */
+/* KHUSUS MODE LANDSCAPE PADA HP (Layar Pendek) */
 @media (max-height: 500px) and (orientation: landscape) {
-  .app {
-    grid-template-rows: 40px 1fr; /* Perkecil header agar space konten luas */
+  .topbar {
+    height: 48px;
   }
 
-  .header {
-    padding: 0 10px;
+  .content {
+    padding: 12px;
   }
 
-  .body {
-    grid-template-columns: 1fr 300px; /* Kembalikan 2 kolom di landscape lebar */
-    grid-template-rows: 1fr;
+  /* Statistik kembali ke 3 atau 4 kolom agar tidak terlalu memanjang ke bawah */
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 
-  .products-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  .modal-box {
+    padding: 20px;
+    max-height: 92vh;
   }
 
-  /* Sembunyikan beberapa elemen dekoratif agar tidak sempit */
-  .brand-name span, .brand-icon {
+  /* Sembunyikan sub-title di topbar agar hemat ruang */
+  .tb-date {
     display: none;
   }
-
-  /* Optimasi modal agar tidak terpotong layar pendek */
-  .modal-box {
-    padding: 15px;
-    max-height: 95vh;
-  }
-
-  .payment-area {
-    padding: 8px;
-  }
-
-  .btn-proses {
-    height: 40px;
-  }
-}
-
-/* Utility untuk memastikan elemen memanjang penuh jika dibutuhkan */
-.w-full {
-  width: 100% !important;
-  box-sizing: border-box;
 }
 
 /* Memperbaiki tinggi body di mobile agar tidak terpotong notch/address bar */
-body {
-  height: 100dvh; /* Menggunakan Dynamic Viewport Height */
+html, body {
+  height: 100dvh;
+}
+
+.w-full {
+  width: 100% !important;
+  box-sizing: border-box;
 }
 </style>
 </head>
