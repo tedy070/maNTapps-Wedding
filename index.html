@@ -322,6 +322,85 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13
 .badge-owner{background:var(--blueDim);color:var(--blue);}
 .badge-admin{background:var(--greenDim);color:var(--green);}
 .badge-user{background:var(--bg3);color:var(--text3);}
+
+  /* ── PENYESUAIAN MOBILE & RESPONSIF (PORTRAIT & LANDSCAPE) ── */
+
+@media (max-width: 900px) {
+  /* Ubah layout utama menjadi satu kolom di HP */
+  .body { 
+    grid-template-columns: 1fr; 
+    grid-template-rows: 1fr auto; /* Cart pindah ke bawah atau sembunyi */
+    overflow-y: auto;
+  }
+
+  /* Panel kanan (Cart) menyesuaikan lebar layar */
+  .right-panel {
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: 60vh; /* Batasi tinggi cart di mobile agar tidak menutupi produk */
+  }
+
+  /* Grid produk menyesuaikan layar kecil */
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    padding: 10px;
+    height: auto;
+  }
+
+  .stats-row {
+    grid-template-columns: 1fr 1fr; /* Statistik jadi 2 kolom */
+  }
+}
+
+/* KHUSUS MODE LANDSCAPE PADA HP (Layar Pendek & Lebar) */
+@media (max-height: 500px) and (orientation: landscape) {
+  .app {
+    grid-template-rows: 40px 1fr; /* Perkecil header agar space konten luas */
+  }
+
+  .header {
+    padding: 0 10px;
+  }
+
+  .body {
+    grid-template-columns: 1fr 300px; /* Kembalikan 2 kolom di landscape lebar */
+    grid-template-rows: 1fr;
+  }
+
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+
+  /* Sembunyikan beberapa elemen dekoratif agar tidak sempit */
+  .brand-name span, .brand-icon {
+    display: none;
+  }
+
+  /* Optimasi modal agar tidak terpotong layar pendek */
+  .modal-box {
+    padding: 15px;
+    max-height: 95vh;
+  }
+
+  .payment-area {
+    padding: 8px;
+  }
+
+  .btn-proses {
+    height: 40px;
+  }
+}
+
+/* Utility untuk memastikan elemen memanjang penuh jika dibutuhkan */
+.w-full {
+  width: 100% !important;
+  box-sizing: border-box;
+}
+
+/* Memperbaiki tinggi body di mobile agar tidak terpotong notch/address bar */
+body {
+  height: 100dvh; /* Menggunakan Dynamic Viewport Height */
+}
 </style>
 </head>
 <body>
